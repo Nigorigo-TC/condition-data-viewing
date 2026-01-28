@@ -7,8 +7,8 @@ from datetime import datetime
 # --------------------------------------
 # 1. Supabase 接続
 # --------------------------------------
-SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+supabase_url = st.secrets["SUPABASE_URL"]
+supabase_key = st.secrets["SUPABASE_KEY"]
 TABLE = st.secrets["support_data"]
 FIXED_TEAM = st.secrets["トーエネック"]  # ← チーム固定
 
@@ -86,5 +86,6 @@ if not plot_df.empty:
     st.metric(label=f"{column} の平均値", value=round(mean_val, 2))
 else:
     st.info("指定期間のデータがありません。")
+
 
 
