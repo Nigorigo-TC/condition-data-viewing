@@ -7,10 +7,10 @@ from datetime import datetime
 # --------------------------------------
 # 1. Supabase 接続
 # --------------------------------------
-SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
-TABLE = st.secrets["SUPABASE_TABLE"]
-FIXED_TEAM = st.secrets["FIXED_TEAM"]  # ← チーム固定
+SUPABASE_URL = st.secrets["https://zadmkthnxgbgsipxciuf.supabase.co"]
+SUPABASE_KEY = st.secrets["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZG1rdGhueGdiZ3NpcHhjaXVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM2NjMxNTEsImV4cCI6MjA1OTIzOTE1MX0.dv5vl3aZ6gcaDHi2-W3F4rT4wTrB3U1jgretX-yG_VU"]
+TABLE = st.secrets["support_data"]
+FIXED_TEAM = st.secrets["トーエネック"]  # ← チーム固定
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -88,3 +88,4 @@ if not plot_df.empty:
     st.metric(label=f"{column} の平均値", value=round(mean_val, 2))
 else:
     st.info("指定期間のデータがありません。")
+
