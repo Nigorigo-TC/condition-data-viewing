@@ -4,32 +4,31 @@ import pandas as pd
 import altair as alt
 from datetime import datetime
 
-# --------------------------------------
 # 1. Supabase 接続
-# --------------------------------------
 supabase_url = st.secrets["SUPABASE_URL"]
 supabase_key = st.secrets["SUPABASE_KEY"]
-TABLE = st.secrets["support_data"]
-FIXED_TEAM = st.secrets["トーエネック"]  # ← チーム固定
+table_name   = st.secrets["SUPABASE_TABLE"]
+fixed_team   = st.secrets["FIXED_TEAM"]
 
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase = create_client(supabase_url, supabase_key)
 
-# --------------------------------------
-# 2. データ取得（チーム固定）
-# --------------------------------------
+# 2. データ取得
 def load_data():
     result = (
-        supabase.table(TABLE)
+        supabase.table(table_name)
         .select("*")
-        .eq("team", FIXED_TEAM)
-        # .eq("is_active", True)  # ★この列がない場合はコメントアウトしておく
+        .eq("team", fixed_team)
+        # .eq("is_active", True)  # カラムがないならコメントアウトのまま
         .execute()
     )
     return pd.DataFrame(result.data)
 
 df = load_data()
 
-st.title(f"{FIXED_TEAM} サポートデータ閲覧アプリ")
+st.title(f"{fixed_team} サポートデータ閲覧アプリ")
+
+# （以下は今のコードのままでOK）
+
 
 # --------------------------------------
 # 3. ユーザー選択UI
@@ -86,6 +85,7 @@ if not plot_df.empty:
     st.metric(label=f"{column} の平均値", value=round(mean_val, 2))
 else:
     st.info("指定期間のデータがありません。")
+
 
 
 
