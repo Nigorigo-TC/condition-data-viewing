@@ -244,7 +244,6 @@ summary = summary.rename(columns={
     "name": "選手",
     "count": "測定回数",
     "mean": "平均値",
-    "std": "標準偏差",
     "min": "最小値",
     "max": "最大値"
 })
@@ -253,6 +252,7 @@ for c in ["平均値", "標準偏差", "最小値", "最大値"]:
     summary[c] = summary[c].round(2)
 
 st.dataframe(summary, use_container_width=True)
+
 
 
 
