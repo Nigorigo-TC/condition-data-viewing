@@ -66,15 +66,14 @@ metric_dict = {
     "TP": "tp",
     "HF": "hf",
     "LF": "lf",
-    # ★ここ重要：Supabaseの列名は lf_hf_ratio のような形が普通
-    "LF/HF": "lf_hf_ratio",
+    "LF/HF": "lf_hf_ratio",   # ★ "lf/hf" はNG。実カラム名に合わせる
     "ヘモグロビン濃度": "hb_conc",
     "総ヘモグロビン量": "hbmass",
     "総ヘモグロビン量/体重": "hbmass_per_kg",
     "推定VO2max/体重": "vo2max_per_kg",
     "蛋白": "pro",
     "クレアチニン": "cre",
-    "pH": "ph",          # ★Supabase側が "pH" なら "pH" に戻してください
+    "pH": "ph",               # ★ Supabase側が "pH" なら "pH" に戻す
     "尿比重": "sg",
     "その他": "another",
     "備考": "remarks",
@@ -84,48 +83,35 @@ metric_dict = {
 # 4) 軸設定（項目ごと）
 #    y_domain: (min,max) or None（自動）
 #    y_zero:   0起点にするか
+#    tick_step: 目盛り刻み（例：20なら 0,20,40...）
 # -----------------------------
 axis_config = {
-    # mm系（0-100固定）
-    "全般的な体調（mm）": {"y_domain": (0, 100), "y_zero": True},
-    "疲労感（mm）": {"y_domain": (0, 100), "y_zero": True},
-    "睡眠の深さ（mm）": {"y_domain": (0, 100), "y_zero": True},
-    "食欲（mm）": {"y_domain": (0, 100), "y_zero": True},
-    "故障の程度（mm）": {"y_domain": (0, 100), "y_zero": True},
-    "練習強度（mm）": {"y_domain": (0, 100), "y_zero": True},
+    # mm系（0-100固定、20刻み）
+    "全般的な体調（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 20},
+    "疲労感（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 20},
+    "睡眠の深さ（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 20},
+    "食欲（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 20},
+    "故障の程度（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 20},
+    "練習強度（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 20},
 
-    # 時間・距離など（例。必要なら調整）
-    "睡眠時間（h）": {"y_domain": (0, 12), "y_zero": True},
-    "トレーニング時間（min）": {"y_domain": (0, 300), "y_zero": True},
-    "走行距離（km）": {"y_domain": (0, 50), "y_zero": True},
+    # 時間・距離など
+    "睡眠時間（h）": {"y_domain": (0, 12), "y_zero": True, "tick_step": 1},
+    "トレーニング時間（min）": {"y_domain": (0, 300), "y_zero": True, "tick_step": 30},
+    "走行距離（km）": {"y_domain": (0, 50), "y_zero": True, "tick_step": 5},
 
-    # 生理指標の例
-    "SpO2（%）": {"y_domain": (85, 100), "y_zero": False},
-    "心拍数（bpm）": {"y_domain": (30, 80), "y_zero": False},
-    "体温（℃）": {"y_domain": (34, 40), "y_zero": False},
+    # 生理指標
+    "SpO2（%）": {"y_domain": (85, 100), "y_zero": False, "tick_step": 1},
+    "心拍数（bpm）": {"y_domain": (30, 80), "y_zero": False, "tick_step": 10},
+    "体温（℃）": {"y_domain": (34, 40), "y_zero": False, "tick_step": 0.5},
 
-    # 体重・血液などは個人差大 → 基本は自動（None）
-    "体重（kg）": {"y_domain": None, "y_zero": False},
-    "体重変化率（%）": {"y_domain": None, "y_zero": True},
-    "sRPE": {"y_domain": None, "y_zero": True},
-    "RPE": {"y_domain": (0, 10), "y_zero": True},
-    "d-ROMs": {"y_domain": None, "y_zero": False},
-    "BAP": {"y_domain": None, "y_zero": False},
-    "BAP/d-ROMs": {"y_domain": None, "y_zero": False},
-    "CK": {"y_domain": None, "y_zero": False},
-    "TP": {"y_domain": None, "y_zero": False},
-    "HF": {"y_domain": None, "y_zero": True},
-    "LF": {"y_domain": None, "y_zero": True},
-    "LF/HF": {"y_domain": None, "y_zero": True},
-    "ヘモグロビン濃度": {"y_domain": None, "y_zero": False},
-    "総ヘモグロビン量": {"y_domain": None, "y_zero": False},
-    "総ヘモグロビン量/体重": {"y_domain": None, "y_zero": False},
-    "推定VO2max/体重": {"y_domain": None, "y_zero": False},
-    "蛋白": {"y_domain": None, "y_zero": False},
-    "クレアチニン": {"y_domain": None, "y_zero": False},
-    "pH": {"y_domain": (4, 9), "y_zero": False},   # 尿pHならこのくらい
-    "尿比重": {"y_domain": (1.000, 1.040), "y_zero": False},
-    # 文字列系（notes/remarks/another/stool_form）はグラフ対象外にするのが安全
+    # RPEなど
+    "RPE": {"y_domain": (0, 10), "y_zero": True, "tick_step": 1},
+
+    # 尿系
+    "pH": {"y_domain": (4, 9), "y_zero": False, "tick_step": 1},
+    "尿比重": {"y_domain": (1.000, 1.040), "y_zero": False, "tick_step": 0.005},
+
+    # それ以外（未指定）は自動
 }
 
 # X軸表示
@@ -182,7 +168,7 @@ if column in non_numeric_cols:
     st.warning("この項目は文字データのため、折れ線グラフ表示に向きません。別の項目を選んでください。")
     st.stop()
 
-# 数値化（安全策：数値にならない値は NaN）
+# 数値化（数値にならない値は NaN）
 df_sel[column] = pd.to_numeric(df_sel[column], errors="coerce")
 
 # -----------------------------
@@ -199,17 +185,29 @@ mask = (
 plot_df = df_sel.loc[mask, ["measurement_date", "name", column]].dropna().sort_values(["name", "measurement_date"])
 
 # -----------------------------
-# 9) グラフ表示（色＝選手、項目ごとに縦軸設定）
+# 9) グラフ表示（色＝選手、項目ごとに縦軸＆目盛り刻み設定）
 # -----------------------------
 if plot_df.empty:
     st.info("指定期間のデータがありません。")
     st.stop()
 
-cfg = axis_config.get(metric_ja, {"y_domain": None, "y_zero": False})
-y_domain = cfg.get("y_domain", None)
-y_zero   = cfg.get("y_zero", False)
+cfg = axis_config.get(metric_ja, {"y_domain": None, "y_zero": False, "tick_step": None})
+y_domain  = cfg.get("y_domain", None)
+y_zero    = cfg.get("y_zero", False)
+tick_step = cfg.get("tick_step", None)
 
 y_scale = alt.Scale(domain=y_domain, zero=y_zero) if y_domain else alt.Scale(zero=y_zero)
+
+# tick_step がある場合は、目盛り位置(values)を生成
+y_axis = alt.Axis()
+if y_domain and tick_step:
+    y_min, y_max = y_domain
+    ticks = []
+    v = y_min
+    while v <= y_max + 1e-9:
+        ticks.append(round(v, 6))
+        v += tick_step
+    y_axis = alt.Axis(values=ticks)
 
 st.subheader(f"{', '.join(selected_names)} ： {metric_ja} の推移")
 
@@ -218,7 +216,7 @@ chart = (
     .mark_line(point=True)
     .encode(
         x=alt.X("measurement_date:T", title="測定日", axis=alt.Axis(format=x_axis_format)),
-        y=alt.Y(f"{column}:Q", title=metric_ja, scale=y_scale),
+        y=alt.Y(f"{column}:Q", title=metric_ja, scale=y_scale, axis=y_axis),
         color=alt.Color("name:N", title="選手"),
         tooltip=[
             alt.Tooltip("name:N", title="選手"),
