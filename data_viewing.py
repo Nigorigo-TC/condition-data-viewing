@@ -236,7 +236,7 @@ st.altair_chart(chart, use_container_width=True)
 st.subheader("平均値（選手ごと）")
 summary = (
     plot_df.groupby("name")[column]
-    .agg(["count", "mean", "std", "min", "max"])
+    .agg(["count", "mean", "min", "max"])
     .reset_index()
 )
 
@@ -248,10 +248,11 @@ summary = summary.rename(columns={
     "max": "最大値"
 })
 
-for c in ["平均値", "標準偏差", "最小値", "最大値"]:
+for c in ["平均値", "最小値", "最大値"]:
     summary[c] = summary[c].round(2)
 
 st.dataframe(summary, use_container_width=True)
+
 
 
 
