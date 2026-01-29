@@ -87,12 +87,12 @@ metric_dict = {
 # -----------------------------
 axis_config = {
     # mm系（0-100固定、20刻み）
-    "全般的な体調（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 20},
-    "疲労感（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 20},
-    "睡眠の深さ（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 20},
-    "食欲（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 20},
-    "故障の程度（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 20},
-    "練習強度（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 20},
+    "全般的な体調（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 10},
+    "疲労感（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 10},
+    "睡眠の深さ（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 10},
+    "食欲（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 10},
+    "故障の程度（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 10},
+    "練習強度（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 10},
 
     # 時間・距離など
     "睡眠時間（h）": {"y_domain": (0, 12), "y_zero": True, "tick_step": 1},
@@ -100,8 +100,8 @@ axis_config = {
     "走行距離（km）": {"y_domain": (0, 50), "y_zero": True, "tick_step": 5},
 
     # 生理指標
-    "SpO2（%）": {"y_domain": (85, 100), "y_zero": False, "tick_step": 1},
-    "心拍数（bpm）": {"y_domain": (30, 80), "y_zero": False, "tick_step": 10},
+    "SpO2（%）": {"y_domain": (88, 100), "y_zero": False, "tick_step": 1},
+    "心拍数（bpm）": {"y_domain": (30, 80), "y_zero": False, "tick_step": 5},
     "体温（℃）": {"y_domain": (34, 40), "y_zero": False, "tick_step": 0.5},
 
     # RPEなど
@@ -253,6 +253,7 @@ for c in ["平均値", "標準偏差", "最小値", "最大値"]:
     summary[c] = summary[c].round(2)
 
 st.dataframe(summary, use_container_width=True)
+
 
 
 
