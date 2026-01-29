@@ -27,7 +27,7 @@ def load_data():
 
 df = load_data()
 
-st.title(f"{fixed_team} データ（最大5人比較）")
+st.title(f"{fixed_team} データ")
 
 if df.empty:
     st.warning("Supabaseからデータが取得できませんでした（0件）。")
@@ -252,6 +252,7 @@ for c in ["平均値", "最小値", "最大値"]:
     summary[c] = summary[c].round(2)
 
 st.dataframe(summary, use_container_width=True)
+
 
 
 
