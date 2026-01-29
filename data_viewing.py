@@ -25,7 +25,7 @@ def load_data():
 
 df = load_data()
 
-st.title(f"{fixed_team} サポートデータ閲覧アプリ")
+st.title(f"{fixed_team} データ")
 
 # （以下は今のコードのままでOK）
 
@@ -36,13 +36,25 @@ st.title(f"{fixed_team} サポートデータ閲覧アプリ")
 athletes = sorted(df["name"].dropna().unique())
 name = st.selectbox("選手を選択してください", athletes)
 
-# 測定日範囲
-df["measurement_date"] = pd.to_datetime(df["measurement_date"])
-min_date = df["measurement_date"].min().date()
-max_date = df["measurement_date"].max().date()
 
-start_date = st.date_input("開始日", min_value=min_date, value=min_date)
-end_date = st.date_input("終了日", min_value=min_date, value=max_date)
+# 測定日（DBに存在する日付だけ）を候補にする
+df["measurement_date"] = pd.to_datetime(df["measurement_date"]).dt.date
+
+available_dates = sorted(df["measurement_date"].dropna().unique())
+
+if len(available_dates) == 0:
+    st.warning("測定日データがありません。")
+    st.stop()
+
+# 開始日・終了日を「候補日」から選択
+start_date = st.selectbox("開始日（測定日から選択）", available_dates, index=0)
+end_date = st.selectbox("終了日（測定日から選択）", available_dates, index=len(available_dates)-1)
+
+# ユーザーが開始＞終了を選んでも壊れないように補正
+if start_date > end_date:
+    st.error("開始日が終了日より後になっています。選び直してください。")
+    st.stop()
+
 
 # 項目選択
 columns_candidates = [
@@ -85,6 +97,7 @@ if not plot_df.empty:
     st.metric(label=f"{column} の平均値", value=round(mean_val, 2))
 else:
     st.info("指定期間のデータがありません。")
+
 
 
 
