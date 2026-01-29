@@ -11,7 +11,7 @@ fixed_team   = st.secrets["FIXED_TEAM"]
 
 supabase = create_client(supabase_url, supabase_key)
 
-# 2. データ取得
+# 2. データ取得（チーム固定）
 def load_data():
     result = (
         supabase.table(table_name)
@@ -30,12 +30,12 @@ if df.empty:
     st.warning("Supabaseからデータが取得できませんでした（0件）。")
     st.stop()
 
-# ★測定日は Timestamp(datetime64) に統一して保持（ここが重要）
+# 測定日は Timestamp(datetime64) に統一して保持
 df["measurement_date"] = pd.to_datetime(df["measurement_date"], errors="coerce")
 df = df.dropna(subset=["measurement_date"])
 
 # --------------------------------------
-# 3. ユーザー選択UI
+# 3. 選手選択
 # --------------------------------------
 athletes = sorted(df["name"].dropna().unique())
 if len(athletes) == 0:
@@ -44,19 +44,25 @@ if len(athletes) == 0:
 
 name = st.selectbox("選手を選択してください", athletes)
 
-# 測定日候補（表示用はdate）
-available_dates = sorted(df["measurement_date"].dt.date.unique())
+# ★選手で絞ったデータ
+df_ath = df[df["name"] == name].copy()
+
+# ★この選手に存在する測定日だけ候補にする（表示用はdate）
+available_dates = sorted(df_ath["measurement_date"].dt.date.unique())
 if len(available_dates) == 0:
-    st.warning("測定日データがありません。")
+    st.warning("この選手の測定日データがありません。")
     st.stop()
 
-start_date = st.selectbox("開始日（測定日から選択）", available_dates, index=0)
-end_date   = st.selectbox("終了日（測定日から選択）", available_dates, index=len(available_dates) - 1)
+start_date = st.selectbox("開始日（この選手の測定日から選択）", available_dates, index=0)
+end_date   = st.selectbox("終了日（この選手の測定日から選択）", available_dates, index=len(available_dates) - 1)
 
 if start_date > end_date:
     st.error("開始日が終了日より後になっています。選び直してください。")
     st.stop()
 
+# --------------------------------------
+# 4. 指標選択
+# --------------------------------------
 columns_candidates = [
     "fatigue_mm", "sleep_hours", "training_intensity",
     "body_mass", "spo2", "heart_rate", "ck", "tp",
@@ -65,22 +71,20 @@ columns_candidates = [
 column = st.selectbox("表示する指標を選択してください", columns_candidates)
 
 # --------------------------------------
-# 4. データ抽出処理
+# 5. データ抽出
 # --------------------------------------
-# ★start/end も Timestamp に変換してから比較（ここが重要）
 start_ts = pd.Timestamp(start_date)
 end_ts   = pd.Timestamp(end_date)
 
 mask = (
-    (df["name"] == name) &
-    (df["measurement_date"] >= start_ts) &
-    (df["measurement_date"] <= end_ts)
+    (df_ath["measurement_date"] >= start_ts) &
+    (df_ath["measurement_date"] <= end_ts)
 )
 
-plot_df = df.loc[mask, ["measurement_date", column]].sort_values("measurement_date")
+plot_df = df_ath.loc[mask, ["measurement_date", column]].sort_values("measurement_date")
 
 # --------------------------------------
-# 5. グラフ表示
+# 6. グラフ表示
 # --------------------------------------
 if not plot_df.empty:
     st.subheader(f"{name} ： {column} の推移")
