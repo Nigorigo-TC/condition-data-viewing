@@ -66,14 +66,14 @@ metric_dict = {
     "TP": "tp",
     "HF": "hf",
     "LF": "lf",
-    "LF/HF": "lf_hf_ratio",   # ★ "lf/hf" はNG。実カラム名に合わせる
+    "LF/HF": "lf_hf_ratio",
     "ヘモグロビン濃度": "hb_conc",
     "総ヘモグロビン量": "hbmass",
     "総ヘモグロビン量/体重": "hbmass_per_kg",
     "推定VO2max/体重": "vo2max_per_kg",
     "蛋白": "pro",
     "クレアチニン": "cre",
-    "pH": "ph",               # ★ Supabase側が "pH" なら "pH" に戻す
+    "pH": "ph",
     "尿比重": "sg",
     "その他": "another",
     "備考": "remarks",
@@ -81,12 +81,9 @@ metric_dict = {
 
 # -----------------------------
 # 4) 軸設定（項目ごと）
-#    y_domain: (min,max) or None（自動）
-#    y_zero:   0起点にするか
-#    tick_step: 目盛り刻み（例：20なら 0,20,40...）
 # -----------------------------
 axis_config = {
-    # mm系（0-100固定、20刻み）
+    # mm系（0-100固定、10刻み）
     "全般的な体調（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 10},
     "疲労感（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 10},
     "睡眠の深さ（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 10},
@@ -94,27 +91,19 @@ axis_config = {
     "故障の程度（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 10},
     "練習強度（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 10},
 
-    # 時間・距離など
     "睡眠時間（h）": {"y_domain": (0, 12), "y_zero": True, "tick_step": 1},
     "トレーニング時間（min）": {"y_domain": (0, 300), "y_zero": True, "tick_step": 30},
     "走行距離（km）": {"y_domain": (0, 50), "y_zero": True, "tick_step": 5},
 
-    # 生理指標
     "SpO2（%）": {"y_domain": (88, 100), "y_zero": False, "tick_step": 1},
     "心拍数（bpm）": {"y_domain": (30, 80), "y_zero": False, "tick_step": 5},
     "体温（℃）": {"y_domain": (34, 40), "y_zero": False, "tick_step": 0.5},
 
-    # RPEなど
     "RPE": {"y_domain": (0, 10), "y_zero": True, "tick_step": 1},
-
-    # 尿系
     "pH": {"y_domain": (4, 9), "y_zero": False, "tick_step": 1},
     "尿比重": {"y_domain": (1.000, 1.040), "y_zero": False, "tick_step": 0.005},
-
-    # それ以外（未指定）は自動
 }
 
-# X軸表示
 x_axis_format = "%Y-%m-%d"
 
 # -----------------------------
@@ -142,7 +131,7 @@ if len(selected_names) > 5:
 df_sel = df[df["name"].isin(selected_names)].copy()
 
 # -----------------------------
-# 6) 期間選択（選択された選手の測定日候補）
+# 6) 期間選択
 # -----------------------------
 available_dates = sorted(df_sel["measurement_date"].dt.date.unique())
 if len(available_dates) == 0:
@@ -156,24 +145,6 @@ if start_date > end_date:
     st.error("開始日が終了日より後になっています。選び直してください。")
     st.stop()
 
-# -----------------------------
-# 7) 指標選択（日本語）
-# -----------------------------
-metric_ja = st.selectbox("表示する指標を選択してください", options=list(metric_dict.keys()))
-column = metric_dict[metric_ja]
-
-# 文字列系を選んだ場合のガード（グラフ化不可）
-non_numeric_cols = {"notes", "remarks", "another", "stool_form"}
-if column in non_numeric_cols:
-    st.warning("この項目は文字データのため、折れ線グラフ表示に向きません。別の項目を選んでください。")
-    st.stop()
-
-# 数値化（数値にならない値は NaN）
-df_sel[column] = pd.to_numeric(df_sel[column], errors="coerce")
-
-# -----------------------------
-# 8) データ抽出（期間で絞る）
-# -----------------------------
 start_ts = pd.Timestamp(start_date)
 end_ts   = pd.Timestamp(end_date)
 
@@ -181,80 +152,111 @@ mask = (
     (df_sel["measurement_date"] >= start_ts) &
     (df_sel["measurement_date"] <= end_ts)
 )
+df_period = df_sel.loc[mask].copy()
 
-plot_df = df_sel.loc[mask, ["measurement_date", "name", column]].dropna().sort_values(["name", "measurement_date"])
-
-# -----------------------------
-# 9) グラフ表示（色＝選手、項目ごとに縦軸＆目盛り刻み設定）
-# -----------------------------
-if plot_df.empty:
+if df_period.empty:
     st.info("指定期間のデータがありません。")
     st.stop()
 
-cfg = axis_config.get(metric_ja, {"y_domain": None, "y_zero": False, "tick_step": None})
-y_domain  = cfg.get("y_domain", None)
-y_zero    = cfg.get("y_zero", False)
-tick_step = cfg.get("tick_step", None)
+# -----------------------------
+# 7) 指標選択（最大5項目）
+# -----------------------------
+non_numeric_cols = {"notes", "remarks", "another", "stool_form"}
 
-y_scale = alt.Scale(domain=y_domain, zero=y_zero) if y_domain else alt.Scale(zero=y_zero)
+# 選択肢から「文字列系」を外す（選べないようにする）
+metric_options = [k for k, v in metric_dict.items() if v not in non_numeric_cols]
 
-# tick_step がある場合は、目盛り位置(values)を生成
-y_axis = alt.Axis()
-if y_domain and tick_step:
-    y_min, y_max = y_domain
-    ticks = []
-    v = y_min
-    while v <= y_max + 1e-9:
-        ticks.append(round(v, 6))
-        v += tick_step
-    y_axis = alt.Axis(values=ticks)
+selected_metrics_ja = st.multiselect(
+    "表示する指標を選択してください（最大5項目）",
+    options=metric_options,
+    default=[metric_options[0]] if len(metric_options) > 0 else []
+)
 
-st.subheader(f"{', '.join(selected_names)} ： {metric_ja} の推移")
+if len(selected_metrics_ja) == 0:
+    st.info("少なくとも1項目選択してください。")
+    st.stop()
 
-chart = (
-    alt.Chart(plot_df)
-    .mark_line(point=True)
-    .encode(
-        x=alt.X("measurement_date:T", title="測定日", axis=alt.Axis(format=x_axis_format)),
-        y=alt.Y(f"{column}:Q", title=metric_ja, scale=y_scale, axis=y_axis),
-        color=alt.Color("name:N", title="選手"),
-        tooltip=[
-            alt.Tooltip("name:N", title="選手"),
-            alt.Tooltip("measurement_date:T", title="測定日", format=x_axis_format),
-            alt.Tooltip(f"{column}:Q", title=metric_ja),
-        ],
+if len(selected_metrics_ja) > 5:
+    st.error("指標の選択は最大5項目までです。5項目以内にしてください。")
+    st.stop()
+
+# -----------------------------
+# 8) 指標ごとにグラフを表示（最大5枚）
+# -----------------------------
+st.subheader(f"選手：{', '.join(selected_names)} / 期間：{start_date} 〜 {end_date}")
+
+for metric_ja in selected_metrics_ja:
+    col = metric_dict[metric_ja]
+
+    # 数値化（NaNは落とす）
+    df_period[col] = pd.to_numeric(df_period[col], errors="coerce")
+
+    plot_df = (
+        df_period.loc[:, ["measurement_date", "name", col]]
+        .dropna()
+        .sort_values(["name", "measurement_date"])
     )
-    .properties(height=350)
-    .interactive()
-)
 
-st.altair_chart(chart, use_container_width=True)
+    if plot_df.empty:
+        st.info(f"は指定期間のデータがありません。")
+        continue
 
-# -----------------------------
-# 10) 平均値（選手ごと）
-# -----------------------------
-st.subheader("平均値（選手ごと）")
-summary = (
-    plot_df.groupby("name")[column]
-    .agg(["count", "mean", "min", "max"])
-    .reset_index()
-)
+    # 軸設定
+    cfg = axis_config.get(metric_ja, {"y_domain": None, "y_zero": False, "tick_step": None})
+    y_domain  = cfg.get("y_domain", None)
+    y_zero    = cfg.get("y_zero", False)
+    tick_step = cfg.get("tick_step", None)
 
-summary = summary.rename(columns={
-    "name": "選手",
-    "count": "測定回数",
-    "mean": "平均値",
-    "min": "最小値",
-    "max": "最大値"
-})
+    y_scale = alt.Scale(domain=y_domain, zero=y_zero) if y_domain else alt.Scale(zero=y_zero)
 
-for c in ["平均値", "最小値", "最大値"]:
-    summary[c] = summary[c].round(2)
+    y_axis = alt.Axis()
+    if y_domain and tick_step:
+        y_min, y_max = y_domain
+        ticks = []
+        v = y_min
+        while v <= y_max + 1e-9:
+            ticks.append(round(v, 6))
+            v += tick_step
+        y_axis = alt.Axis(values=ticks)
 
-st.dataframe(summary, use_container_width=True)
+    st.markdown(f"### {metric_ja}")
 
+    chart = (
+        alt.Chart(plot_df)
+        .mark_line(point=True)
+        .encode(
+            x=alt.X("measurement_date:T", title="測定日", axis=alt.Axis(format=x_axis_format)),
+            y=alt.Y(f"{col}:Q", title=metric_ja, scale=y_scale, axis=y_axis),
+            color=alt.Color("name:N", title="選手"),
+            tooltip=[
+                alt.Tooltip("name:N", title="選手"),
+                alt.Tooltip("measurement_date:T", title="測定日", format=x_axis_format),
+                alt.Tooltip(f"{col}:Q", title=metric_ja),
+            ],
+        )
+        .properties(height=300)
+        .interactive()
+    )
 
+    st.altair_chart(chart, use_container_width=True)
 
+    # 平均値（選手ごと）
+    summary = (
+        plot_df.groupby("name")[col]
+        .agg(["count", "mean", "min", "max"])
+        .reset_index()
+        .rename(columns={
+            "name": "選手",
+            "count": "測定回数",
+            "mean": "平均値",
+            "min": "最小値",
+            "max": "最大値",
+        })
+    )
+    for c in ["平均値", "最小値", "最大値"]:
+        summary[c] = summary[c].round(2)
+
+    st.dataframe(summary, use_container_width=True)
 
 
 
