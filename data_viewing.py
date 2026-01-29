@@ -100,9 +100,9 @@ axis_config = {
     "走行距離（km）": {"y_domain": (0, 50), "y_zero": True},
 
     # 生理指標の例
-    "SpO2（%）": {"y_domain": (70, 100), "y_zero": False},
-    "心拍数（bpm）": {"y_domain": (30, 220), "y_zero": False},
-    "体温（℃）": {"y_domain": (34, 41), "y_zero": False},
+    "SpO2（%）": {"y_domain": (85, 100), "y_zero": False},
+    "心拍数（bpm）": {"y_domain": (30, 80), "y_zero": False},
+    "体温（℃）": {"y_domain": (34, 40), "y_zero": False},
 
     # 体重・血液などは個人差大 → 基本は自動（None）
     "体重（kg）": {"y_domain": None, "y_zero": False},
@@ -255,6 +255,7 @@ for c in ["平均値", "標準偏差", "最小値", "最大値"]:
     summary[c] = summary[c].round(2)
 
 st.dataframe(summary, use_container_width=True)
+
 
 
 
