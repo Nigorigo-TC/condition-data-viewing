@@ -109,8 +109,7 @@ x_axis_format = "%Y-%m-%d"
 # -----------------------------
 # ★テキスト（文字列）列：自動で表に出す
 # -----------------------------
-# 「故障の箇所」の Supabase カラム名をここで指定（要修正）
-INJURY_LOC_COL = "injury_location"  # 例: "injury_site" / "injury_part" など
+INJURY_LOC_COL = "injury_location"  # 必要なら変更
 
 TEXT_COLS = [
     ("睡眠状況", "sleep_status"),
@@ -145,29 +144,27 @@ if len(selected_names) > 5:
 df_sel = df[df["name"].isin(selected_names)].copy()
 
 # -----------------------------
-# 6) 抽出方法：期間 or 年度+合宿回数
+# 6) 抽出方法：期間 or 年度+月
 # -----------------------------
-CAMP_COL = "camp_number"   # ★合宿回数カラム名（必要なら変更）
 YEAR_COL = "fiscal_year"   # ★年度カラム名（必要なら変更）
 
-for colname in [CAMP_COL, YEAR_COL]:
-    if colname not in df_sel.columns:
-        st.error(f"必要な列 '{colname}' が見つかりません。列名を確認してください。")
-        st.stop()
+if YEAR_COL not in df_sel.columns:
+    st.error(f"必要な列 '{YEAR_COL}' が見つかりません。列名を確認してください。")
+    st.stop()
 
-df_sel[CAMP_COL] = pd.to_numeric(df_sel[CAMP_COL], errors="coerce")
 df_sel[YEAR_COL] = pd.to_numeric(df_sel[YEAR_COL], errors="coerce")
 
 mode = st.radio(
     "データの選び方",
-    options=["期間で選ぶ", "年度＋合宿回数で選ぶ"],
+    options=["期間で選ぶ", "年度＋月で選ぶ"],
     horizontal=True
 )
 
 df_period = None
 filter_label = ""
 
-if mode == "年度＋合宿回数で選ぶ":
+if mode == "年度＋月で選ぶ":
+    # 年度候補（選手選択後に存在するものだけ）
     years = sorted(df_sel[YEAR_COL].dropna().unique())
     years = [y for y in years if y >= 2016]
 
@@ -181,32 +178,27 @@ if mode == "年度＋合宿回数で選ぶ":
         index=len(years) - 1
     )
 
+    # 選択年度のデータだけ取り出して、存在する月を候補化
     df_year = df_sel[df_sel[YEAR_COL] == selected_year].copy()
-    camps = sorted(df_year[CAMP_COL].dropna().unique())
-    camps = [c for c in camps if 1 <= c <= 7]
-
-    if len(camps) == 0:
-        st.warning("指定年度に合宿回数（1〜7）のデータがありません。")
+    if df_year.empty:
+        st.info("指定年度のデータがありません。")
         st.stop()
 
-    selected_camps = st.multiselect(
-        "合宿回数を選択してください（複数可）",
-        options=camps,
-        default=[camps[-1]]
-    )
+    df_year["month"] = df_year["measurement_date"].dt.month
+    months = sorted(df_year["month"].dropna().unique())
 
-    if len(selected_camps) == 0:
-        st.info("少なくとも1つ選択してください。")
+    if len(months) == 0:
+        st.info("指定年度に測定日のある月がありません。")
         st.stop()
 
-    df_period = df_sel[
-        (df_sel[YEAR_COL] == selected_year) &
-        (df_sel[CAMP_COL].isin(selected_camps))
-    ].copy()
-
-    filter_label = (
-        f"年度：{int(selected_year)} / 合宿回数：{', '.join(str(int(x)) for x in selected_camps)}"
+    selected_month = st.selectbox(
+        "月を選択してください（測定日が存在する月のみ）",
+        options=months,
+        index=len(months) - 1
     )
+
+    df_period = df_year[df_year["month"] == selected_month].copy()
+    filter_label = f"年度：{int(selected_year)} / 月：{int(selected_month)}"
 
 else:
     available_dates = sorted(df_sel["measurement_date"].dt.date.unique())
