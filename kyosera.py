@@ -109,8 +109,7 @@ x_axis_format = "%Y-%m-%d"
 # -----------------------------
 # ★テキスト（文字列）列：自動で表に出す
 # -----------------------------
-# 「故障の箇所」の Supabase カラム名をここで指定（要修正）
-INJURY_LOC_COL = "injury_location"  # 例: "injury_site" / "injury_part" など
+INJURY_LOC_COL = "injury_location"  # 必要なら変更
 
 TEXT_COLS = [
     ("睡眠状況", "sleep_status"),
@@ -121,92 +120,137 @@ TEXT_COLS = [
 ]
 
 # -----------------------------
-# 5) 選手選択（最大5人）
+# 5) 比較モード
+# -----------------------------
+compare_mode = st.radio(
+    "比較モード",
+    options=["複数選手比較（最大5人）", "同一選手の年度比較（1人＋最大5年）"],
+    horizontal=True
+)
+
+# -----------------------------
+# 6) 選手選択
 # -----------------------------
 athletes = sorted(df["name"].dropna().unique())
 if len(athletes) == 0:
     st.warning("選手名（name）が見つかりません。")
     st.stop()
 
-selected_names = st.multiselect(
-    "選手を選択してください（最大5人）",
-    options=athletes,
-    default=[athletes[0]] if len(athletes) > 0 else []
-)
-
-if len(selected_names) == 0:
-    st.info("少なくとも1人選択してください。")
-    st.stop()
-
-if len(selected_names) > 5:
-    st.error("選択は最大5人までです。5人以内にしてください。")
-    st.stop()
+if compare_mode == "複数選手比較（最大5人）":
+    selected_names = st.multiselect(
+        "選手を選択してください（最大5人）",
+        options=athletes,
+        default=[athletes[0]] if len(athletes) > 0 else []
+    )
+    if len(selected_names) == 0:
+        st.info("少なくとも1人選択してください。")
+        st.stop()
+    if len(selected_names) > 5:
+        st.error("選択は最大5人までです。5人以内にしてください。")
+        st.stop()
+else:
+    selected_name = st.selectbox(
+        "選手を選択してください（同一選手比較：1人）",
+        options=athletes,
+        index=0
+    )
+    selected_names = [selected_name]
 
 df_sel = df[df["name"].isin(selected_names)].copy()
 
 # -----------------------------
-# 6) 抽出方法：期間 or 年度+合宿回数
+# 7) 抽出：期間 or 年度+月
 # -----------------------------
-CAMP_COL = "camp_number"   # ★合宿回数カラム名（必要なら変更）
-YEAR_COL = "fiscal_year"   # ★年度カラム名（必要なら変更）
+YEAR_COL = "fiscal_year"
+if YEAR_COL not in df_sel.columns:
+    st.error(f"必要な列 '{YEAR_COL}' が見つかりません。列名を確認してください。")
+    st.stop()
 
-for colname in [CAMP_COL, YEAR_COL]:
-    if colname not in df_sel.columns:
-        st.error(f"必要な列 '{colname}' が見つかりません。列名を確認してください。")
-        st.stop()
-
-df_sel[CAMP_COL] = pd.to_numeric(df_sel[CAMP_COL], errors="coerce")
 df_sel[YEAR_COL] = pd.to_numeric(df_sel[YEAR_COL], errors="coerce")
 
 mode = st.radio(
     "データの選び方",
-    options=["期間で選ぶ", "年度＋合宿回数で選ぶ"],
+    options=["期間で選ぶ", "年度＋月で選ぶ"],
     horizontal=True
 )
 
 df_period = None
 filter_label = ""
 
-if mode == "年度＋合宿回数で選ぶ":
-    years = sorted(df_sel[YEAR_COL].dropna().unique())
-    years = [y for y in years if y >= 2016]
-
-    if len(years) == 0:
+if mode == "年度＋月で選ぶ":
+    years_all = sorted(df_sel[YEAR_COL].dropna().unique())
+    years_all = [y for y in years_all if y >= 2016]
+    if len(years_all) == 0:
         st.warning("年度（2016〜）のデータがありません。")
         st.stop()
 
-    selected_year = st.selectbox(
-        "年度を選択してください",
-        options=years,
-        index=len(years) - 1
-    )
+    if compare_mode == "同一選手の年度比較（1人＋最大5年）":
+        selected_years = st.multiselect(
+            "年度を選択してください（最大5年）",
+            options=years_all,
+            default=[years_all[-1]]
+        )
+        if len(selected_years) == 0:
+            st.info("少なくとも1つ年度を選択してください。")
+            st.stop()
+        if len(selected_years) > 5:
+            st.error("年度の選択は最大5年までです。5年以内にしてください。")
+            st.stop()
 
-    df_year = df_sel[df_sel[YEAR_COL] == selected_year].copy()
-    camps = sorted(df_year[CAMP_COL].dropna().unique())
-    camps = [c for c in camps if 1 <= c <= 7]
+        df_year = df_sel[df_sel[YEAR_COL].isin(selected_years)].copy()
 
-    if len(camps) == 0:
-        st.warning("指定年度に合宿回数（1〜7）のデータがありません。")
-        st.stop()
+        # 選択年度群の中で存在する月だけ
+        df_year["month"] = df_year["measurement_date"].dt.month
+        months = sorted(df_year["month"].dropna().unique())
+        if len(months) == 0:
+            st.info("指定年度に測定日のある月がありません。")
+            st.stop()
 
-    selected_camps = st.multiselect(
-        "合宿回数を選択してください（複数可）",
-        options=camps,
-        default=[camps[-1]]
-    )
+        selected_months = st.multiselect(
+            "月を選択してください（複数可 / 測定日が存在する月のみ）",
+            options=months,
+            default=[months[-1]]
+        )
+        if len(selected_months) == 0:
+            st.info("少なくとも1つ月を選択してください。")
+            st.stop()
 
-    if len(selected_camps) == 0:
-        st.info("少なくとも1つ選択してください。")
-        st.stop()
+        df_period = df_year[df_year["month"].isin(selected_months)].copy()
 
-    df_period = df_sel[
-        (df_sel[YEAR_COL] == selected_year) &
-        (df_sel[CAMP_COL].isin(selected_camps))
-    ].copy()
+        years_str  = ", ".join(str(int(y)) for y in selected_years)
+        months_str = ", ".join(str(int(m)) for m in selected_months)
+        filter_label = f"年度：{years_str} / 月：{months_str}"
 
-    filter_label = (
-        f"年度：{int(selected_year)} / 合宿回数：{', '.join(str(int(x)) for x in selected_camps)}"
-    )
+    else:
+        selected_year = st.selectbox(
+            "年度を選択してください",
+            options=years_all,
+            index=len(years_all) - 1
+        )
+
+        df_year = df_sel[df_sel[YEAR_COL] == selected_year].copy()
+        if df_year.empty:
+            st.info("指定年度のデータがありません。")
+            st.stop()
+
+        df_year["month"] = df_year["measurement_date"].dt.month
+        months = sorted(df_year["month"].dropna().unique())
+        if len(months) == 0:
+            st.info("指定年度に測定日のある月がありません。")
+            st.stop()
+
+        selected_months = st.multiselect(
+            "月を選択してください（複数選択可 / 測定日が存在する月のみ）",
+            options=months,
+            default=[months[-1]]
+        )
+        if len(selected_months) == 0:
+            st.info("少なくとも1つ月を選択してください。")
+            st.stop()
+
+        df_period = df_year[df_year["month"].isin(selected_months)].copy()
+        months_str = ", ".join(str(int(m)) for m in selected_months)
+        filter_label = f"年度：{int(selected_year)} / 月：{months_str}"
 
 else:
     available_dates = sorted(df_sel["measurement_date"].dt.date.unique())
@@ -236,10 +280,9 @@ if df_period is None or df_period.empty:
     st.stop()
 
 # -----------------------------
-# 7) 指標選択（最大5項目） ※文字列系は選ばせない
+# 8) 指標選択（最大5項目） ※文字列系は選ばせない
 # -----------------------------
 non_numeric_cols = {"sleep_status", "notes", "another", "remarks", "stool_form", INJURY_LOC_COL}
-
 metric_options = [k for k, v in metric_dict.items() if v not in non_numeric_cols]
 
 selected_metrics_ja = st.multiselect(
@@ -247,38 +290,43 @@ selected_metrics_ja = st.multiselect(
     options=metric_options,
     default=[metric_options[0]] if len(metric_options) > 0 else []
 )
-
 if len(selected_metrics_ja) == 0:
     st.info("少なくとも1項目選択してください。")
     st.stop()
-
 if len(selected_metrics_ja) > 5:
     st.error("指標の選択は最大5項目までです。5項目以内にしてください。")
     st.stop()
 
 # -----------------------------
-# 8) 見出し
+# 9) 見出し
 # -----------------------------
 st.subheader(f"選手：{', '.join(selected_names)} / {filter_label}")
 
 # -----------------------------
-# 9) 指標ごとにグラフを表示（最大5枚）
+# 10) 指標ごとにグラフ
+#   - 複数選手比較：色 = name
+#   - 同一選手年度比較（年度＋月）：色 = 「年度-月」(凡例に月も表示)
+#     x軸は overlay_date（年を捨てた月日）で重ね描き
 # -----------------------------
 for metric_ja in selected_metrics_ja:
     col = metric_dict[metric_ja]
-
     df_period[col] = pd.to_numeric(df_period[col], errors="coerce")
 
+    use_cols = ["measurement_date", "name", YEAR_COL, col]
+    use_cols = [c for c in use_cols if c in df_period.columns]
+
     plot_df = (
-        df_period.loc[:, ["measurement_date", "name", col]]
-        .dropna()
-        .sort_values(["name", "measurement_date"])
+        df_period.loc[:, use_cols]
+        .dropna(subset=["measurement_date", col])
+        .sort_values(["measurement_date"])
+        .copy()
     )
 
     if plot_df.empty:
         st.info(f"{metric_ja} は指定条件のデータがありません。")
         continue
 
+    # 軸設定
     cfg = axis_config.get(metric_ja, {"y_domain": None, "y_zero": False, "tick_step": None})
     y_domain  = cfg.get("y_domain", None)
     y_zero    = cfg.get("y_zero", False)
@@ -298,74 +346,155 @@ for metric_ja in selected_metrics_ja:
 
     st.markdown(f"### {metric_ja}")
 
-    chart = (
-        alt.Chart(plot_df)
-        .mark_line(point=True)
-        .encode(
-            x=alt.X("measurement_date:T", title="測定日", axis=alt.Axis(format=x_axis_format)),
-            y=alt.Y(f"{col}:Q", title=metric_ja, scale=y_scale, axis=y_axis),
-            color=alt.Color("name:N", title="選手"),
-            tooltip=[
-                alt.Tooltip("name:N", title="選手"),
-                alt.Tooltip("measurement_date:T", title="測定日", format=x_axis_format),
-                alt.Tooltip(f"{col}:Q", title=metric_ja),
-            ],
+    if compare_mode == "同一選手の年度比較（1人＋最大5年）" and mode == "年度＋月で選ぶ":
+        # 年度・月列を作る
+        plot_df[YEAR_COL] = pd.to_numeric(plot_df[YEAR_COL], errors="coerce").astype("Int64")
+        plot_df["month"] = pd.to_datetime(plot_df["measurement_date"], errors="coerce").dt.month.astype("Int64")
+
+        # 凡例ラベル：年度-月（例 2018-7）
+        plot_df["year_month_label"] = plot_df[YEAR_COL].astype(str) + "-" + plot_df["month"].astype(str)
+
+        # 重ね描き用：年を捨てた「月日」軸
+        plot_df["overlay_date"] = pd.to_datetime(
+            "2000-" + plot_df["measurement_date"].dt.strftime("%m-%d"),
+            errors="coerce"
         )
-        .properties(height=300)
-        .interactive()
-    )
+        plot_df = plot_df.dropna(subset=["overlay_date", "year_month_label"])
 
-    st.altair_chart(chart, use_container_width=True)
+        # 月をまたいで線が変に繋がるのを防ぐ（年度-月ごとに別線）
+        plot_df["group_key"] = plot_df["year_month_label"]
 
-    summary = (
-        plot_df.groupby("name")[col]
-        .agg(["count", "mean", "min", "max"])
-        .reset_index()
-        .rename(columns={
-            "name": "選手",
-            "count": "測定回数",
-            "mean": "平均値",
-            "min": "最小値",
-            "max": "最大値",
-        })
-    )
-    for c in ["平均値", "最小値", "最大値"]:
-        summary[c] = summary[c].round(2)
+        chart = (
+            alt.Chart(plot_df)
+            .mark_line(point=True)
+            .encode(
+                x=alt.X(
+                    "overlay_date:T",
+                    title="月日",
+                    axis=alt.Axis(format="%m-%d")
+                ),
+                y=alt.Y(f"{col}:Q", title=metric_ja, scale=y_scale, axis=y_axis),
 
-    st.dataframe(summary, use_container_width=True)
+                # ★凡例は「年度-月」
+                color=alt.Color("year_month_label:N", title="年度-月"),
+
+                # ★線のグループ（年度-月ごと）
+                detail=alt.Detail("group_key:N"),
+
+                tooltip=[
+                    alt.Tooltip("year_month_label:N", title="年度-月"),
+                    alt.Tooltip("measurement_date:T", title="測定日", format=x_axis_format),
+                    alt.Tooltip(f"{col}:Q", title=metric_ja),
+                ],
+            )
+            .properties(height=300)
+            .interactive()
+        )
+
+        st.altair_chart(chart, use_container_width=True)
+
+        # 要約：年度-月ごと
+        summary = (
+            plot_df.groupby("year_month_label")[col]
+            .agg(["count", "mean", "min", "max"])
+            .reset_index()
+            .rename(columns={
+                "year_month_label": "年度-月",
+                "count": "測定回数",
+                "mean": "平均値",
+                "min": "最小値",
+                "max": "最大値",
+            })
+            .sort_values("年度-月")
+        )
+        for c in ["平均値", "最小値", "最大値"]:
+            summary[c] = summary[c].round(2)
+
+        st.dataframe(summary, use_container_width=True)
+
+    else:
+        # 複数選手比較（従来）
+        chart = (
+            alt.Chart(plot_df)
+            .mark_line(point=True)
+            .encode(
+                x=alt.X("measurement_date:T", title="測定日", axis=alt.Axis(format=x_axis_format)),
+                y=alt.Y(f"{col}:Q", title=metric_ja, scale=y_scale, axis=y_axis),
+                color=alt.Color("name:N", title="選手"),
+                tooltip=[
+                    alt.Tooltip("name:N", title="選手"),
+                    alt.Tooltip("measurement_date:T", title="測定日", format=x_axis_format),
+                    alt.Tooltip(f"{col}:Q", title=metric_ja),
+                ],
+            )
+            .properties(height=300)
+            .interactive()
+        )
+
+        st.altair_chart(chart, use_container_width=True)
+
+        summary = (
+            plot_df.groupby("name")[col]
+            .agg(["count", "mean", "min", "max"])
+            .reset_index()
+            .rename(columns={
+                "name": "選手",
+                "count": "測定回数",
+                "mean": "平均値",
+                "min": "最小値",
+                "max": "最大値",
+            })
+        )
+        for c in ["平均値", "最小値", "最大値"]:
+            summary[c] = summary[c].round(2)
+
+        st.dataframe(summary, use_container_width=True)
 
 # -----------------------------
-# ★10) テキスト項目はグラフの下に表で出す
+# ★11) テキスト項目（自動表示）
+#   - 同一選手年度比較（年度＋月）のとき：年度-月も出すと見やすい
 # -----------------------------
-st.markdown("## テキスト項目（自動表示）")
+st.markdown("## テキスト項目")
 
 text_cols_exist = [(ja, col) for (ja, col) in TEXT_COLS if col in df_period.columns]
 
 if len(text_cols_exist) == 0:
     st.info("テキスト項目の列が見つかりません。")
 else:
-    show_cols = ["measurement_date", "name"] + [col for (_, col) in text_cols_exist]
+    text_base_cols = ["measurement_date", "name"]
+    if compare_mode == "同一選手の年度比較（1人＋最大5年）" and mode == "年度＋月で選ぶ":
+        # 年度・月を列として付ける（表示用）
+        df_period["_fy"] = pd.to_numeric(df_period[YEAR_COL], errors="coerce").astype("Int64")
+        df_period["_m"] = pd.to_datetime(df_period["measurement_date"], errors="coerce").dt.month.astype("Int64")
+        df_period["_year_month_label"] = df_period["_fy"].astype(str) + "-" + df_period["_m"].astype(str)
+        text_base_cols = ["measurement_date", "_year_month_label", "name"]
+
+    show_cols = text_base_cols + [col for (_, col) in text_cols_exist]
+    show_cols = [c for c in show_cols if c in df_period.columns]
+
     text_df = df_period.loc[:, show_cols].copy()
+    text_df["measurement_date"] = pd.to_datetime(text_df["measurement_date"], errors="coerce").dt.strftime(x_axis_format)
 
-    # 表示用に日付を文字列へ
-    text_df["measurement_date"] = text_df["measurement_date"].dt.strftime(x_axis_format)
-
-    # 文字列の前後空白を除去
     for _, col in text_cols_exist:
-        text_df[col] = text_df[col].astype(str).str.strip()
-        text_df.loc[text_df[col].isin(["nan", "None", "NaT"]), col] = ""
+        if col in text_df.columns:
+            text_df[col] = text_df[col].astype(str).str.strip()
+            text_df.loc[text_df[col].isin(["nan", "None", "NaT"]), col] = ""
 
-    # テキストが全部空の行は落とす（必要なら）
-    text_only_cols = [col for (_, col) in text_cols_exist]
-    text_df = text_df.dropna(subset=text_only_cols, how="all")
-    text_df = text_df[~(text_df[text_only_cols].apply(lambda r: all(str(x).strip() == "" for x in r), axis=1))]
-
-    # 列名を日本語に
     rename_map = {col: ja for (ja, col) in text_cols_exist}
     text_df = text_df.rename(columns=rename_map)
 
-    # 並び
-    text_df = text_df.sort_values(["name", "measurement_date"])
+    if "_year_month_label" in text_df.columns:
+        text_df = text_df.rename(columns={"_year_month_label": "年度-月"})
+
+    sort_cols = ["name", "measurement_date"]
+    if "年度-月" in text_df.columns:
+        sort_cols = ["年度-月"] + sort_cols
+    text_df = text_df.sort_values(sort_cols)
+
+    # テキストが全部空の行は落とす（任意）
+    text_only_cols = [ja for (ja, col) in text_cols_exist if ja in text_df.columns]
+    if len(text_only_cols) > 0:
+        text_df = text_df[~(text_df[text_only_cols].apply(lambda r: all(str(x).strip() == "" for x in r), axis=1))]
 
     if text_df.empty:
         st.info("指定条件の範囲で、テキスト入力があるデータはありません。")
