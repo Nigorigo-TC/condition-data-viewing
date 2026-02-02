@@ -454,7 +454,7 @@ for metric_ja in selected_metrics_ja:
 # ★11) テキスト項目（自動表示）
 #   - 同一選手年度比較（年度＋月）のとき：年度-月も出すと見やすい
 # -----------------------------
-st.markdown("## テキスト項目（自動表示）")
+st.markdown("## テキスト項目")
 
 text_cols_exist = [(ja, col) for (ja, col) in TEXT_COLS if col in df_period.columns]
 
@@ -500,6 +500,7 @@ else:
         st.info("指定条件の範囲で、テキスト入力があるデータはありません。")
     else:
         st.dataframe(text_df, use_container_width=True)
+
 
 
 
