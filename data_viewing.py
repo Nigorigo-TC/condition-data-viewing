@@ -164,7 +164,7 @@ if mode == "年度＋合宿回数で選ぶ":
         st.stop()
 
     selected_year = st.selectbox(
-        "年度（fiscal_year）を選択してください",
+        "年度を選択してください",
         options=years,
         index=len(years) - 1  # 最新年度をデフォルト
     )
@@ -181,7 +181,7 @@ if mode == "年度＋合宿回数で選ぶ":
         st.stop()
 
     selected_camps = st.multiselect(
-        "合宿回数を選択してください（1〜7、複数可）",
+        "合宿回数を選択してください（複数可）",
         options=camps,
         default=[camps[-1]]
     )
@@ -321,6 +321,7 @@ for metric_ja in selected_metrics_ja:
         summary[c] = summary[c].round(2)
 
     st.dataframe(summary, use_container_width=True)
+
 
 
 
