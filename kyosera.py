@@ -160,10 +160,10 @@ if compare_mode == "複数選手比較（最大5人）":
         default=[athletes[0]] if len(athletes) > 0 else []
     )
     if len(selected_names_norm) == 0:
-        st.info("少なくとも1人選択してください。")
+        st.info("1人以上選択してください。")
         st.stop()
     if len(selected_names_norm) > 5:
-        st.error("選択は最大5人までです。5人以内にしてください。")
+        st.error("選択は最大5人までです。")
         st.stop()
 else:
     selected_name_norm = st.selectbox(
