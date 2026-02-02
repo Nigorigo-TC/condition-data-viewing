@@ -144,7 +144,7 @@ if len(selected_names) > 5:
 df_sel = df[df["name"].isin(selected_names)].copy()
 
 # -----------------------------
-# 6) 抽出方法：期間 or 年度+月
+# 6) 抽出方法：期間 or 年度+月（複数月OK）
 # -----------------------------
 YEAR_COL = "fiscal_year"   # ★年度カラム名（必要なら変更）
 
@@ -164,7 +164,6 @@ df_period = None
 filter_label = ""
 
 if mode == "年度＋月で選ぶ":
-    # 年度候補（選手選択後に存在するものだけ）
     years = sorted(df_sel[YEAR_COL].dropna().unique())
     years = [y for y in years if y >= 2016]
 
@@ -178,7 +177,6 @@ if mode == "年度＋月で選ぶ":
         index=len(years) - 1
     )
 
-    # 選択年度のデータだけ取り出して、存在する月を候補化
     df_year = df_sel[df_sel[YEAR_COL] == selected_year].copy()
     if df_year.empty:
         st.info("指定年度のデータがありません。")
@@ -191,14 +189,20 @@ if mode == "年度＋月で選ぶ":
         st.info("指定年度に測定日のある月がありません。")
         st.stop()
 
-    selected_month = st.selectbox(
-        "月を選択してください（測定日が存在する月のみ）",
+    # ★複数月選択
+    selected_months = st.multiselect(
+        "月を選択してください（複数選択可 / 測定日が存在する月のみ）",
         options=months,
-        index=len(months) - 1
+        default=[months[-1]]
     )
 
-    df_period = df_year[df_year["month"] == selected_month].copy()
-    filter_label = f"年度：{int(selected_year)} / 月：{int(selected_month)}"
+    if len(selected_months) == 0:
+        st.info("少なくとも1つ月を選択してください。")
+        st.stop()
+
+    df_period = df_year[df_year["month"].isin(selected_months)].copy()
+    months_str = ", ".join(str(int(m)) for m in selected_months)
+    filter_label = f"年度：{int(selected_year)} / 月：{months_str}"
 
 else:
     available_dates = sorted(df_sel["measurement_date"].dt.date.unique())
@@ -231,7 +235,6 @@ if df_period is None or df_period.empty:
 # 7) 指標選択（最大5項目） ※文字列系は選ばせない
 # -----------------------------
 non_numeric_cols = {"sleep_status", "notes", "another", "remarks", "stool_form", INJURY_LOC_COL}
-
 metric_options = [k for k, v in metric_dict.items() if v not in non_numeric_cols]
 
 selected_metrics_ja = st.multiselect(
@@ -363,3 +366,5 @@ else:
         st.info("指定条件の範囲で、テキスト入力があるデータはありません。")
     else:
         st.dataframe(text_df, use_container_width=True)
+
+
