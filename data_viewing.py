@@ -120,7 +120,7 @@ TEXT_COLS = [
 ]
 
 # -----------------------------
-# 5) 比較モード選択（追加）
+# 5) 比較モード
 # -----------------------------
 compare_mode = st.radio(
     "比較モード",
@@ -129,7 +129,7 @@ compare_mode = st.radio(
 )
 
 # -----------------------------
-# 6) 選手選択（モードで分岐）
+# 6) 選手選択
 # -----------------------------
 athletes = sorted(df["name"].dropna().unique())
 if len(athletes) == 0:
@@ -142,17 +142,13 @@ if compare_mode == "複数選手比較（最大5人）":
         options=athletes,
         default=[athletes[0]] if len(athletes) > 0 else []
     )
-
     if len(selected_names) == 0:
         st.info("少なくとも1人選択してください。")
         st.stop()
-
     if len(selected_names) > 5:
         st.error("選択は最大5人までです。5人以内にしてください。")
         st.stop()
-
 else:
-    # 同一選手比較：1人だけ
     selected_name = st.selectbox(
         "選手を選択してください（同一選手比較：1人）",
         options=athletes,
@@ -163,10 +159,9 @@ else:
 df_sel = df[df["name"].isin(selected_names)].copy()
 
 # -----------------------------
-# 7) 抽出：期間 or 年度+月（年度比較では年度が複数）
+# 7) 抽出：期間 or 年度+月
 # -----------------------------
 YEAR_COL = "fiscal_year"
-
 if YEAR_COL not in df_sel.columns:
     st.error(f"必要な列 '{YEAR_COL}' が見つかりません。列名を確認してください。")
     st.stop()
@@ -185,7 +180,6 @@ filter_label = ""
 if mode == "年度＋月で選ぶ":
     years_all = sorted(df_sel[YEAR_COL].dropna().unique())
     years_all = [y for y in years_all if y >= 2016]
-
     if len(years_all) == 0:
         st.warning("年度（2016〜）のデータがありません。")
         st.stop()
@@ -205,7 +199,7 @@ if mode == "年度＋月で選ぶ":
 
         df_year = df_sel[df_sel[YEAR_COL].isin(selected_years)].copy()
 
-        # 選択年度群の中で「存在する月」だけ出す
+        # 選択年度群の中で存在する月だけ
         df_year["month"] = df_year["measurement_date"].dt.month
         months = sorted(df_year["month"].dropna().unique())
         if len(months) == 0:
@@ -228,7 +222,6 @@ if mode == "年度＋月で選ぶ":
         filter_label = f"年度：{years_str} / 月：{months_str}"
 
     else:
-        # 複数選手比較（従来通り：年度は1つ）
         selected_year = st.selectbox(
             "年度を選択してください",
             options=years_all,
@@ -242,7 +235,6 @@ if mode == "年度＋月で選ぶ":
 
         df_year["month"] = df_year["measurement_date"].dt.month
         months = sorted(df_year["month"].dropna().unique())
-
         if len(months) == 0:
             st.info("指定年度に測定日のある月がありません。")
             st.stop()
@@ -261,7 +253,6 @@ if mode == "年度＋月で選ぶ":
         filter_label = f"年度：{int(selected_year)} / 月：{months_str}"
 
 else:
-    # 期間で選ぶ（共通）
     available_dates = sorted(df_sel["measurement_date"].dt.date.unique())
     if len(available_dates) == 0:
         st.warning("選択した選手の測定日データがありません。")
@@ -299,11 +290,9 @@ selected_metrics_ja = st.multiselect(
     options=metric_options,
     default=[metric_options[0]] if len(metric_options) > 0 else []
 )
-
 if len(selected_metrics_ja) == 0:
     st.info("少なくとも1項目選択してください。")
     st.stop()
-
 if len(selected_metrics_ja) > 5:
     st.error("指標の選択は最大5項目までです。5項目以内にしてください。")
     st.stop()
@@ -314,15 +303,15 @@ if len(selected_metrics_ja) > 5:
 st.subheader(f"選手：{', '.join(selected_names)} / {filter_label}")
 
 # -----------------------------
-# 10) 指標ごとにグラフを表示（最大5枚）
+# 10) 指標ごとにグラフ
 #   - 複数選手比較：色 = name
-#   - 同一選手年度比較：色 = fiscal_year（年度）
+#   - 同一選手年度比較（年度＋月）：色 = 「年度-月」(凡例に月も表示)
+#     x軸は overlay_date（年を捨てた月日）で重ね描き
 # -----------------------------
 for metric_ja in selected_metrics_ja:
     col = metric_dict[metric_ja]
     df_period[col] = pd.to_numeric(df_period[col], errors="coerce")
 
-    # plot用データ
     use_cols = ["measurement_date", "name", YEAR_COL, col]
     use_cols = [c for c in use_cols if c in df_period.columns]
 
@@ -358,19 +347,43 @@ for metric_ja in selected_metrics_ja:
     st.markdown(f"### {metric_ja}")
 
     if compare_mode == "同一選手の年度比較（1人＋最大5年）" and mode == "年度＋月で選ぶ":
-        # 同一選手の年度比較：色を年度に
-        plot_df[YEAR_COL] = plot_df[YEAR_COL].astype("Int64").astype(str)
+        # 年度・月列を作る
+        plot_df[YEAR_COL] = pd.to_numeric(plot_df[YEAR_COL], errors="coerce").astype("Int64")
+        plot_df["month"] = pd.to_datetime(plot_df["measurement_date"], errors="coerce").dt.month.astype("Int64")
+
+        # 凡例ラベル：年度-月（例 2018-7）
+        plot_df["year_month_label"] = plot_df[YEAR_COL].astype(str) + "-" + plot_df["month"].astype(str)
+
+        # 重ね描き用：年を捨てた「月日」軸
+        plot_df["overlay_date"] = pd.to_datetime(
+            "2000-" + plot_df["measurement_date"].dt.strftime("%m-%d"),
+            errors="coerce"
+        )
+        plot_df = plot_df.dropna(subset=["overlay_date", "year_month_label"])
+
+        # 月をまたいで線が変に繋がるのを防ぐ（年度-月ごとに別線）
+        plot_df["group_key"] = plot_df["year_month_label"]
 
         chart = (
             alt.Chart(plot_df)
             .mark_line(point=True)
             .encode(
-                x=alt.X("measurement_date:T", title="測定日", axis=alt.Axis(format=x_axis_format)),
+                x=alt.X(
+                    "overlay_date:T",
+                    title="月日",
+                    axis=alt.Axis(format="%m-%d")
+                ),
                 y=alt.Y(f"{col}:Q", title=metric_ja, scale=y_scale, axis=y_axis),
-                color=alt.Color(f"{YEAR_COL}:N", title="年度"),
+
+                # ★凡例は「年度-月」
+                color=alt.Color("year_month_label:N", title="年度-月"),
+
+                # ★線のグループ（年度-月ごと）
+                detail=alt.Detail("group_key:N"),
+
                 tooltip=[
+                    alt.Tooltip("year_month_label:N", title="年度-月"),
                     alt.Tooltip("measurement_date:T", title="測定日", format=x_axis_format),
-                    alt.Tooltip(f"{YEAR_COL}:N", title="年度"),
                     alt.Tooltip(f"{col}:Q", title=metric_ja),
                 ],
             )
@@ -380,18 +393,19 @@ for metric_ja in selected_metrics_ja:
 
         st.altair_chart(chart, use_container_width=True)
 
-        # 年度ごとの要約
+        # 要約：年度-月ごと
         summary = (
-            plot_df.groupby(YEAR_COL)[col]
+            plot_df.groupby("year_month_label")[col]
             .agg(["count", "mean", "min", "max"])
             .reset_index()
             .rename(columns={
-                YEAR_COL: "年度",
+                "year_month_label": "年度-月",
                 "count": "測定回数",
                 "mean": "平均値",
                 "min": "最小値",
                 "max": "最大値",
             })
+            .sort_values("年度-月")
         )
         for c in ["平均値", "最小値", "最大値"]:
             summary[c] = summary[c].round(2)
@@ -399,7 +413,7 @@ for metric_ja in selected_metrics_ja:
         st.dataframe(summary, use_container_width=True)
 
     else:
-        # 複数選手比較（従来）：色を選手名に
+        # 複数選手比較（従来）
         chart = (
             alt.Chart(plot_df)
             .mark_line(point=True)
@@ -419,7 +433,6 @@ for metric_ja in selected_metrics_ja:
 
         st.altair_chart(chart, use_container_width=True)
 
-        # 選手ごとの要約
         summary = (
             plot_df.groupby("name")[col]
             .agg(["count", "mean", "min", "max"])
@@ -438,8 +451,8 @@ for metric_ja in selected_metrics_ja:
         st.dataframe(summary, use_container_width=True)
 
 # -----------------------------
-# ★11) テキスト項目はグラフの下に表で出す
-#   - 同一選手年度比較（年度＋月）のとき：年度列も出すと見やすい
+# ★11) テキスト項目（自動表示）
+#   - 同一選手年度比較（年度＋月）のとき：年度-月も出すと見やすい
 # -----------------------------
 st.markdown("## テキスト項目（自動表示）")
 
@@ -448,32 +461,34 @@ text_cols_exist = [(ja, col) for (ja, col) in TEXT_COLS if col in df_period.colu
 if len(text_cols_exist) == 0:
     st.info("テキスト項目の列が見つかりません。")
 else:
-    base_cols = ["measurement_date", "name"]
+    text_base_cols = ["measurement_date", "name"]
     if compare_mode == "同一選手の年度比較（1人＋最大5年）" and mode == "年度＋月で選ぶ":
-        base_cols = ["measurement_date", YEAR_COL, "name"]
+        # 年度・月を列として付ける（表示用）
+        df_period["_fy"] = pd.to_numeric(df_period[YEAR_COL], errors="coerce").astype("Int64")
+        df_period["_m"] = pd.to_datetime(df_period["measurement_date"], errors="coerce").dt.month.astype("Int64")
+        df_period["_year_month_label"] = df_period["_fy"].astype(str) + "-" + df_period["_m"].astype(str)
+        text_base_cols = ["measurement_date", "_year_month_label", "name"]
 
-    show_cols = base_cols + [col for (_, col) in text_cols_exist]
+    show_cols = text_base_cols + [col for (_, col) in text_cols_exist]
     show_cols = [c for c in show_cols if c in df_period.columns]
 
     text_df = df_period.loc[:, show_cols].copy()
-
-    # 表示用に日付を文字列へ
     text_df["measurement_date"] = pd.to_datetime(text_df["measurement_date"], errors="coerce").dt.strftime(x_axis_format)
 
-    # 文字列の前後空白を除去
     for _, col in text_cols_exist:
         if col in text_df.columns:
             text_df[col] = text_df[col].astype(str).str.strip()
             text_df.loc[text_df[col].isin(["nan", "None", "NaT"]), col] = ""
 
-    # 列名を日本語に
     rename_map = {col: ja for (ja, col) in text_cols_exist}
     text_df = text_df.rename(columns=rename_map)
 
-    # 並び
+    if "_year_month_label" in text_df.columns:
+        text_df = text_df.rename(columns={"_year_month_label": "年度-月"})
+
     sort_cols = ["name", "measurement_date"]
-    if YEAR_COL in text_df.columns:
-        sort_cols = [YEAR_COL] + sort_cols
+    if "年度-月" in text_df.columns:
+        sort_cols = ["年度-月"] + sort_cols
     text_df = text_df.sort_values(sort_cols)
 
     # テキストが全部空の行は落とす（任意）
