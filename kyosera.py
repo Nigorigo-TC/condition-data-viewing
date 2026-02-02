@@ -492,4 +492,3 @@ else:
         st.info("指定条件の範囲で、テキスト入力があるデータはありません。")
     else:
         st.dataframe(text_df, use_container_width=True)
-True)
