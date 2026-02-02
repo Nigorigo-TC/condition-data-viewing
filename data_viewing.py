@@ -107,6 +107,16 @@ axis_config = {
 x_axis_format = "%Y-%m-%d"
 
 # -----------------------------
+# ★テキスト（文字列）列：自動で表に出す
+# -----------------------------
+TEXT_COLS = [
+    ("睡眠状況", "sleep_status"),
+    ("特記事項", "notes"),
+    ("その他", "another"),
+    ("備考", "remarks"),
+]
+
+# -----------------------------
 # 5) 選手選択（最大5人）
 # -----------------------------
 athletes = sorted(df["name"].dropna().unique())
@@ -133,7 +143,7 @@ df_sel = df[df["name"].isin(selected_names)].copy()
 # -----------------------------
 # 6) 抽出方法：期間 or 年度+合宿回数
 # -----------------------------
-CAMP_COL = "camp_number"       # ★合宿回数カラム名（必要なら変更）
+CAMP_COL = "camp_number"   # ★合宿回数カラム名（必要なら変更）
 YEAR_COL = "fiscal_year"   # ★年度カラム名（必要なら変更）
 
 for colname in [CAMP_COL, YEAR_COL]:
@@ -141,7 +151,6 @@ for colname in [CAMP_COL, YEAR_COL]:
         st.error(f"必要な列 '{colname}' が見つかりません。列名を確認してください。")
         st.stop()
 
-# 念のため数値化
 df_sel[CAMP_COL] = pd.to_numeric(df_sel[CAMP_COL], errors="coerce")
 df_sel[YEAR_COL] = pd.to_numeric(df_sel[YEAR_COL], errors="coerce")
 
@@ -155,9 +164,7 @@ df_period = None
 filter_label = ""
 
 if mode == "年度＋合宿回数で選ぶ":
-    # 年度候補（選手選択後に存在するものだけ）
     years = sorted(df_sel[YEAR_COL].dropna().unique())
-    # 2016以上に限定（必要なければ削除OK）
     years = [y for y in years if y >= 2016]
 
     if len(years) == 0:
@@ -167,14 +174,11 @@ if mode == "年度＋合宿回数で選ぶ":
     selected_year = st.selectbox(
         "年度を選択してください",
         options=years,
-        index=len(years) - 1  # 最新年度をデフォルト
+        index=len(years) - 1
     )
 
-    # 選択年度に絞ってから合宿回数候補を作る（←ここがポイント）
     df_year = df_sel[df_sel[YEAR_COL] == selected_year].copy()
     camps = sorted(df_year[CAMP_COL].dropna().unique())
-
-    # 1〜7に限定（必要なら）
     camps = [c for c in camps if 1 <= c <= 7]
 
     if len(camps) == 0:
@@ -191,7 +195,6 @@ if mode == "年度＋合宿回数で選ぶ":
         st.info("少なくとも1つ選択してください。")
         st.stop()
 
-    # 年度 + 合宿回数 の AND 条件で抽出
     df_period = df_sel[
         (df_sel[YEAR_COL] == selected_year) &
         (df_sel[CAMP_COL].isin(selected_camps))
@@ -229,9 +232,10 @@ if df_period is None or df_period.empty:
     st.stop()
 
 # -----------------------------
-# 7) 指標選択（最大5項目）
+# 7) 指標選択（最大5項目） ※文字列系は選ばせない
 # -----------------------------
-non_numeric_cols = {"notes", "remarks", "another", "stool_form"}
+non_numeric_cols = {"sleep_status", "notes", "another", "remarks", "stool_form"}
+
 metric_options = [k for k, v in metric_dict.items() if v not in non_numeric_cols]
 
 selected_metrics_ja = st.multiselect(
@@ -249,10 +253,53 @@ if len(selected_metrics_ja) > 5:
     st.stop()
 
 # -----------------------------
-# 8) 指標ごとにグラフを表示（最大5枚）
+# 8) 見出し
 # -----------------------------
 st.subheader(f"選手：{', '.join(selected_names)} / {filter_label}")
 
+# -----------------------------
+# ★9) テキスト項目は自動で表に出す（グラフとは別）
+# -----------------------------
+st.markdown("## テキスト項目（自動表示）")
+
+# 表に出す列（存在するものだけ）
+text_cols_exist = [(ja, col) for (ja, col) in TEXT_COLS if col in df_period.columns]
+
+if len(text_cols_exist) == 0:
+    st.info("テキスト項目の列が見つかりません。")
+else:
+    show_cols = ["measurement_date", "name"] + [col for (_, col) in text_cols_exist]
+    text_df = df_period.loc[:, show_cols].copy()
+
+    # 表示用に日付を文字列へ
+    text_df["measurement_date"] = text_df["measurement_date"].dt.strftime(x_axis_format)
+
+    # 文字列の前後空白を除去（任意）
+    for _, col in text_cols_exist:
+        text_df[col] = text_df[col].astype(str).str.strip()
+        # "nan" のような表示を空にする（任意）
+        text_df.loc[text_df[col].isin(["nan", "None", "NaT"]), col] = ""
+
+    # テキストが全部空の行は落とす（必要なら）
+    text_only_cols = [col for (_, col) in text_cols_exist]
+    text_df = text_df.dropna(subset=text_only_cols, how="all")
+    text_df = text_df[~(text_df[text_only_cols].apply(lambda r: all(str(x).strip() == "" for x in r), axis=1))]
+
+    # 列名を日本語に
+    rename_map = {col: ja for (ja, col) in text_cols_exist}
+    text_df = text_df.rename(columns=rename_map)
+
+    # 並び
+    text_df = text_df.sort_values(["name", "measurement_date"])
+
+    if text_df.empty:
+        st.info("指定条件の範囲で、テキスト入力があるデータはありません。")
+    else:
+        st.dataframe(text_df, use_container_width=True)
+
+# -----------------------------
+# 10) 指標ごとにグラフを表示（最大5枚）
+# -----------------------------
 for metric_ja in selected_metrics_ja:
     col = metric_dict[metric_ja]
 
@@ -322,6 +369,7 @@ for metric_ja in selected_metrics_ja:
         summary[c] = summary[c].round(2)
 
     st.dataframe(summary, use_container_width=True)
+
 
 
 
