@@ -83,7 +83,6 @@ metric_dict = {
 # 4) 軸設定（項目ごと）
 # -----------------------------
 axis_config = {
-    # mm系（0-100固定、10刻み）
     "全般的な体調（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 10},
     "疲労感（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 10},
     "睡眠の深さ（mm）": {"y_domain": (0, 100), "y_zero": True, "tick_step": 10},
@@ -131,39 +130,107 @@ if len(selected_names) > 5:
 df_sel = df[df["name"].isin(selected_names)].copy()
 
 # -----------------------------
-# 6) 期間選択
+# 6) 抽出方法：期間 or 年度+合宿回数
 # -----------------------------
-available_dates = sorted(df_sel["measurement_date"].dt.date.unique())
-if len(available_dates) == 0:
-    st.warning("選択した選手の測定日データがありません。")
-    st.stop()
+CAMP_COL = "camp_no"       # ★合宿回数カラム名（必要なら変更）
+YEAR_COL = "fiscal_year"   # ★年度カラム名（必要なら変更）
 
-start_date = st.selectbox("開始日（測定日から選択）", available_dates, index=0)
-end_date   = st.selectbox("終了日（測定日から選択）", available_dates, index=len(available_dates) - 1)
+for colname in [CAMP_COL, YEAR_COL]:
+    if colname not in df_sel.columns:
+        st.error(f"必要な列 '{colname}' が見つかりません。列名を確認してください。")
+        st.stop()
 
-if start_date > end_date:
-    st.error("開始日が終了日より後になっています。選び直してください。")
-    st.stop()
+# 念のため数値化
+df_sel[CAMP_COL] = pd.to_numeric(df_sel[CAMP_COL], errors="coerce")
+df_sel[YEAR_COL] = pd.to_numeric(df_sel[YEAR_COL], errors="coerce")
 
-start_ts = pd.Timestamp(start_date)
-end_ts   = pd.Timestamp(end_date)
-
-mask = (
-    (df_sel["measurement_date"] >= start_ts) &
-    (df_sel["measurement_date"] <= end_ts)
+mode = st.radio(
+    "データの選び方",
+    options=["期間で選ぶ", "年度＋合宿回数で選ぶ"],
+    horizontal=True
 )
-df_period = df_sel.loc[mask].copy()
 
-if df_period.empty:
-    st.info("指定期間のデータがありません。")
+df_period = None
+filter_label = ""
+
+if mode == "年度＋合宿回数で選ぶ":
+    # 年度候補（選手選択後に存在するものだけ）
+    years = sorted(df_sel[YEAR_COL].dropna().unique())
+    # 2016以上に限定（必要なければ削除OK）
+    years = [y for y in years if y >= 2016]
+
+    if len(years) == 0:
+        st.warning("年度（2016〜）のデータがありません。")
+        st.stop()
+
+    selected_year = st.selectbox(
+        "年度（fiscal_year）を選択してください",
+        options=years,
+        index=len(years) - 1  # 最新年度をデフォルト
+    )
+
+    # 選択年度に絞ってから合宿回数候補を作る（←ここがポイント）
+    df_year = df_sel[df_sel[YEAR_COL] == selected_year].copy()
+    camps = sorted(df_year[CAMP_COL].dropna().unique())
+
+    # 1〜7に限定（必要なら）
+    camps = [c for c in camps if 1 <= c <= 7]
+
+    if len(camps) == 0:
+        st.warning("指定年度に合宿回数（1〜7）のデータがありません。")
+        st.stop()
+
+    selected_camps = st.multiselect(
+        "合宿回数を選択してください（1〜7、複数可）",
+        options=camps,
+        default=[camps[-1]]
+    )
+
+    if len(selected_camps) == 0:
+        st.info("少なくとも1つ選択してください。")
+        st.stop()
+
+    # 年度 + 合宿回数 の AND 条件で抽出
+    df_period = df_sel[
+        (df_sel[YEAR_COL] == selected_year) &
+        (df_sel[CAMP_COL].isin(selected_camps))
+    ].copy()
+
+    filter_label = (
+        f"年度：{int(selected_year)} / 合宿回数：{', '.join(str(int(x)) for x in selected_camps)}"
+    )
+
+else:
+    available_dates = sorted(df_sel["measurement_date"].dt.date.unique())
+    if len(available_dates) == 0:
+        st.warning("選択した選手の測定日データがありません。")
+        st.stop()
+
+    start_date = st.selectbox("開始日（測定日から選択）", available_dates, index=0)
+    end_date   = st.selectbox("終了日（測定日から選択）", available_dates, index=len(available_dates) - 1)
+
+    if start_date > end_date:
+        st.error("開始日が終了日より後になっています。選び直してください。")
+        st.stop()
+
+    start_ts = pd.Timestamp(start_date)
+    end_ts   = pd.Timestamp(end_date)
+
+    mask = (
+        (df_sel["measurement_date"] >= start_ts) &
+        (df_sel["measurement_date"] <= end_ts)
+    )
+    df_period = df_sel.loc[mask].copy()
+    filter_label = f"期間：{start_date} 〜 {end_date}"
+
+if df_period is None or df_period.empty:
+    st.info("指定条件のデータがありません。")
     st.stop()
 
 # -----------------------------
 # 7) 指標選択（最大5項目）
 # -----------------------------
 non_numeric_cols = {"notes", "remarks", "another", "stool_form"}
-
-# 選択肢から「文字列系」を外す（選べないようにする）
 metric_options = [k for k, v in metric_dict.items() if v not in non_numeric_cols]
 
 selected_metrics_ja = st.multiselect(
@@ -183,12 +250,11 @@ if len(selected_metrics_ja) > 5:
 # -----------------------------
 # 8) 指標ごとにグラフを表示（最大5枚）
 # -----------------------------
-st.subheader(f"選手：{', '.join(selected_names)} / 期間：{start_date} 〜 {end_date}")
+st.subheader(f"選手：{', '.join(selected_names)} / {filter_label}")
 
 for metric_ja in selected_metrics_ja:
     col = metric_dict[metric_ja]
 
-    # 数値化（NaNは落とす）
     df_period[col] = pd.to_numeric(df_period[col], errors="coerce")
 
     plot_df = (
@@ -198,10 +264,9 @@ for metric_ja in selected_metrics_ja:
     )
 
     if plot_df.empty:
-        st.info(f"は指定期間のデータがありません。")
+        st.info(f"{metric_ja} は指定条件のデータがありません。")
         continue
 
-    # 軸設定
     cfg = axis_config.get(metric_ja, {"y_domain": None, "y_zero": False, "tick_step": None})
     y_domain  = cfg.get("y_domain", None)
     y_zero    = cfg.get("y_zero", False)
@@ -240,7 +305,6 @@ for metric_ja in selected_metrics_ja:
 
     st.altair_chart(chart, use_container_width=True)
 
-    # 平均値（選手ごと）
     summary = (
         plot_df.groupby("name")[col]
         .agg(["count", "mean", "min", "max"])
@@ -257,6 +321,8 @@ for metric_ja in selected_metrics_ja:
         summary[c] = summary[c].round(2)
 
     st.dataframe(summary, use_container_width=True)
+
+
 
 
 
