@@ -2,6 +2,7 @@ import streamlit as st
 from supabase import create_client
 import pandas as pd
 import altair as alt
+import re
 
 # -----------------------------
 # 1) Supabase 接続
@@ -33,9 +34,23 @@ if df.empty:
     st.warning("Supabaseからデータが取得できませんでした（0件）。")
     st.stop()
 
-# 測定日は Timestamp に統一
+# -----------------------------
+# 2.5) 測定日と name 正規化（スペース揺れ対策）
+# -----------------------------
 df["measurement_date"] = pd.to_datetime(df["measurement_date"], errors="coerce")
 df = df.dropna(subset=["measurement_date"])
+
+def normalize_name(x: str) -> str:
+    """前後空白除去 + 全角スペース→半角 + 連続空白→1つ"""
+    if pd.isna(x):
+        return ""
+    s = str(x).strip()
+    s = s.replace("\u3000", " ")       # 全角スペース→半角
+    s = re.sub(r"\s+", " ", s)         # 連続空白→1つ
+    return s
+
+# UI・抽出・凡例に使う正規化名
+df["name_norm"] = df["name"].apply(normalize_name)
 
 # -----------------------------
 # 3) 指標名（日本語 ↔ Supabase列名）
@@ -129,34 +144,40 @@ compare_mode = st.radio(
 )
 
 # -----------------------------
-# 6) 選手選択
+# 6) 選手選択（name揺れ対策：name_normで統一）
 # -----------------------------
-athletes = sorted(df["name"].dropna().unique())
+athletes = sorted(df["name_norm"].dropna().unique())
+athletes = [a for a in athletes if str(a).strip() != ""]
+
 if len(athletes) == 0:
     st.warning("選手名（name）が見つかりません。")
     st.stop()
 
 if compare_mode == "複数選手比較（最大5人）":
-    selected_names = st.multiselect(
+    selected_names_norm = st.multiselect(
         "選手を選択してください（最大5人）",
         options=athletes,
         default=[athletes[0]] if len(athletes) > 0 else []
     )
-    if len(selected_names) == 0:
+    if len(selected_names_norm) == 0:
         st.info("少なくとも1人選択してください。")
         st.stop()
-    if len(selected_names) > 5:
+    if len(selected_names_norm) > 5:
         st.error("選択は最大5人までです。5人以内にしてください。")
         st.stop()
 else:
-    selected_name = st.selectbox(
+    selected_name_norm = st.selectbox(
         "選手を選択してください（同一選手比較：1人）",
         options=athletes,
         index=0
     )
-    selected_names = [selected_name]
+    selected_names_norm = [selected_name_norm]
 
-df_sel = df[df["name"].isin(selected_names)].copy()
+# 抽出は name_norm で行う
+df_sel = df[df["name_norm"].isin(selected_names_norm)].copy()
+
+# 以降の既存処理（color="name" 等）を壊さないため、表示用 name を統一
+df_sel["name"] = df_sel["name_norm"]
 
 # -----------------------------
 # 7) 抽出：期間 or 年度+月
@@ -199,7 +220,6 @@ if mode == "年度＋月で選ぶ":
 
         df_year = df_sel[df_sel[YEAR_COL].isin(selected_years)].copy()
 
-        # 選択年度群の中で存在する月だけ
         df_year["month"] = df_year["measurement_date"].dt.month
         months = sorted(df_year["month"].dropna().unique())
         if len(months) == 0:
@@ -300,13 +320,10 @@ if len(selected_metrics_ja) > 5:
 # -----------------------------
 # 9) 見出し
 # -----------------------------
-st.subheader(f"選手：{', '.join(selected_names)} / {filter_label}")
+st.subheader(f"選手：{', '.join(selected_names_norm)} / {filter_label}")
 
 # -----------------------------
 # 10) 指標ごとにグラフ
-#   - 複数選手比較：色 = name
-#   - 同一選手年度比較（年度＋月）：色 = 「年度-月」(凡例に月も表示)
-#     x軸は overlay_date（年を捨てた月日）で重ね描き
 # -----------------------------
 for metric_ja in selected_metrics_ja:
     col = metric_dict[metric_ja]
@@ -326,7 +343,6 @@ for metric_ja in selected_metrics_ja:
         st.info(f"{metric_ja} は指定条件のデータがありません。")
         continue
 
-    # 軸設定
     cfg = axis_config.get(metric_ja, {"y_domain": None, "y_zero": False, "tick_step": None})
     y_domain  = cfg.get("y_domain", None)
     y_zero    = cfg.get("y_zero", False)
@@ -347,40 +363,25 @@ for metric_ja in selected_metrics_ja:
     st.markdown(f"### {metric_ja}")
 
     if compare_mode == "同一選手の年度比較（1人＋最大5年）" and mode == "年度＋月で選ぶ":
-        # 年度・月列を作る
         plot_df[YEAR_COL] = pd.to_numeric(plot_df[YEAR_COL], errors="coerce").astype("Int64")
         plot_df["month"] = pd.to_datetime(plot_df["measurement_date"], errors="coerce").dt.month.astype("Int64")
-
-        # 凡例ラベル：年度-月（例 2018-7）
         plot_df["year_month_label"] = plot_df[YEAR_COL].astype(str) + "-" + plot_df["month"].astype(str)
 
-        # 重ね描き用：年を捨てた「月日」軸
         plot_df["overlay_date"] = pd.to_datetime(
             "2000-" + plot_df["measurement_date"].dt.strftime("%m-%d"),
             errors="coerce"
         )
         plot_df = plot_df.dropna(subset=["overlay_date", "year_month_label"])
-
-        # 月をまたいで線が変に繋がるのを防ぐ（年度-月ごとに別線）
         plot_df["group_key"] = plot_df["year_month_label"]
 
         chart = (
             alt.Chart(plot_df)
             .mark_line(point=True)
             .encode(
-                x=alt.X(
-                    "overlay_date:T",
-                    title="月日",
-                    axis=alt.Axis(format="%m-%d")
-                ),
+                x=alt.X("overlay_date:T", title="月日", axis=alt.Axis(format="%m-%d")),
                 y=alt.Y(f"{col}:Q", title=metric_ja, scale=y_scale, axis=y_axis),
-
-                # ★凡例は「年度-月」
                 color=alt.Color("year_month_label:N", title="年度-月"),
-
-                # ★線のグループ（年度-月ごと）
                 detail=alt.Detail("group_key:N"),
-
                 tooltip=[
                     alt.Tooltip("year_month_label:N", title="年度-月"),
                     alt.Tooltip("measurement_date:T", title="測定日", format=x_axis_format),
@@ -390,10 +391,8 @@ for metric_ja in selected_metrics_ja:
             .properties(height=300)
             .interactive()
         )
-
         st.altair_chart(chart, use_container_width=True)
 
-        # 要約：年度-月ごと
         summary = (
             plot_df.groupby("year_month_label")[col]
             .agg(["count", "mean", "min", "max"])
@@ -409,11 +408,9 @@ for metric_ja in selected_metrics_ja:
         )
         for c in ["平均値", "最小値", "最大値"]:
             summary[c] = summary[c].round(2)
-
         st.dataframe(summary, use_container_width=True)
 
     else:
-        # 複数選手比較（従来）
         chart = (
             alt.Chart(plot_df)
             .mark_line(point=True)
@@ -430,7 +427,6 @@ for metric_ja in selected_metrics_ja:
             .properties(height=300)
             .interactive()
         )
-
         st.altair_chart(chart, use_container_width=True)
 
         summary = (
@@ -447,12 +443,10 @@ for metric_ja in selected_metrics_ja:
         )
         for c in ["平均値", "最小値", "最大値"]:
             summary[c] = summary[c].round(2)
-
         st.dataframe(summary, use_container_width=True)
 
 # -----------------------------
-# ★11) テキスト項目（自動表示）
-#   - 同一選手年度比較（年度＋月）のとき：年度-月も出すと見やすい
+# 11) テキスト項目（自動表示）
 # -----------------------------
 st.markdown("## テキスト項目")
 
@@ -463,7 +457,6 @@ if len(text_cols_exist) == 0:
 else:
     text_base_cols = ["measurement_date", "name"]
     if compare_mode == "同一選手の年度比較（1人＋最大5年）" and mode == "年度＋月で選ぶ":
-        # 年度・月を列として付ける（表示用）
         df_period["_fy"] = pd.to_numeric(df_period[YEAR_COL], errors="coerce").astype("Int64")
         df_period["_m"] = pd.to_datetime(df_period["measurement_date"], errors="coerce").dt.month.astype("Int64")
         df_period["_year_month_label"] = df_period["_fy"].astype(str) + "-" + df_period["_m"].astype(str)
@@ -491,7 +484,6 @@ else:
         sort_cols = ["年度-月"] + sort_cols
     text_df = text_df.sort_values(sort_cols)
 
-    # テキストが全部空の行は落とす（任意）
     text_only_cols = [ja for (ja, col) in text_cols_exist if ja in text_df.columns]
     if len(text_only_cols) > 0:
         text_df = text_df[~(text_df[text_only_cols].apply(lambda r: all(str(x).strip() == "" for x in r), axis=1))]
@@ -500,7 +492,6 @@ else:
         st.info("指定条件の範囲で、テキスト入力があるデータはありません。")
     else:
         st.dataframe(text_df, use_container_width=True)
-
 
 
 
