@@ -139,7 +139,7 @@ TEXT_COLS = [
 # -----------------------------
 compare_mode = st.radio(
     "比較モード",
-    options=["複数選手比較（最大5人）", "同一選手の年度比較（1人＋最大5年）"],
+    options=["複数選手比較（最大5人）", "同一選手比較"],
     horizontal=True
 )
 
@@ -492,6 +492,7 @@ else:
         st.info("指定条件の範囲で、テキスト入力があるデータはありません。")
     else:
         st.dataframe(text_df, use_container_width=True)
+
 
 
 
