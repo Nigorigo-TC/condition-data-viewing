@@ -132,7 +132,7 @@ df_sel = df[df["name"].isin(selected_names)].copy()
 # -----------------------------
 # 6) 抽出方法：期間 or 年度+合宿回数
 # -----------------------------
-CAMP_COL = "camp_no"       # ★合宿回数カラム名（必要なら変更）
+CAMP_COL = "camp_number"       # ★合宿回数カラム名（必要なら変更）
 YEAR_COL = "fiscal_year"   # ★年度カラム名（必要なら変更）
 
 for colname in [CAMP_COL, YEAR_COL]:
@@ -321,6 +321,7 @@ for metric_ja in selected_metrics_ja:
         summary[c] = summary[c].round(2)
 
     st.dataframe(summary, use_container_width=True)
+
 
 
 
