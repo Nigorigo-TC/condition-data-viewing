@@ -45,11 +45,10 @@ def normalize_name(x: str) -> str:
     if pd.isna(x):
         return ""
     s = str(x).strip()
-    s = s.replace("\u3000", " ")       # 全角スペース→半角
-    s = re.sub(r"\s+", " ", s)         # 連続空白→1つ
+    s = s.replace("\u3000", " ")
+    s = re.sub(r"\s+", " ", s)
     return s
 
-# UI・抽出・凡例に使う正規化名
 df["name_norm"] = df["name"].apply(normalize_name)
 
 # -----------------------------
@@ -122,10 +121,9 @@ axis_config = {
 x_axis_format = "%Y-%m-%d"
 
 # -----------------------------
-# ★テキスト（文字列）列：自動で表に出す
+# テキスト列
 # -----------------------------
 INJURY_LOC_COL = "injury_location"  # 必要なら変更
-
 TEXT_COLS = [
     ("睡眠状況", "sleep_status"),
     ("故障の箇所", INJURY_LOC_COL),
@@ -137,14 +135,17 @@ TEXT_COLS = [
 # -----------------------------
 # 5) 比較モード
 # -----------------------------
+MULTI_MODE = "複数選手比較（最大5人）"
+SAME_MODE  = "同一選手比較"
+
 compare_mode = st.radio(
     "比較モード",
-    options=["複数選手比較（最大5人）", "同一選手比較"],
+    options=[MULTI_MODE, SAME_MODE],
     horizontal=True
 )
 
 # -----------------------------
-# 6) 選手選択（name揺れ対策：name_normで統一）
+# 6) 選手選択（name_norm）
 # -----------------------------
 athletes = sorted(df["name_norm"].dropna().unique())
 athletes = [a for a in athletes if str(a).strip() != ""]
@@ -153,11 +154,11 @@ if len(athletes) == 0:
     st.warning("選手名（name）が見つかりません。")
     st.stop()
 
-if compare_mode == "複数選手比較（最大5人）":
+if compare_mode == MULTI_MODE:
     selected_names_norm = st.multiselect(
         "選手を選択してください（最大5人）",
         options=athletes,
-        default=[athletes[0]] if len(athletes) > 0 else []
+        default=[athletes[0]]
     )
     if len(selected_names_norm) == 0:
         st.info("1人以上選択してください。")
@@ -173,11 +174,8 @@ else:
     )
     selected_names_norm = [selected_name_norm]
 
-# 抽出は name_norm で行う
 df_sel = df[df["name_norm"].isin(selected_names_norm)].copy()
-
-# 以降の既存処理（color="name" 等）を壊さないため、表示用 name を統一
-df_sel["name"] = df_sel["name_norm"]
+df_sel["name"] = df_sel["name_norm"]  # 表示用も統一
 
 # -----------------------------
 # 7) 抽出：期間 or 年度+月
@@ -201,11 +199,13 @@ filter_label = ""
 if mode == "年度＋月で選ぶ":
     years_all = sorted(df_sel[YEAR_COL].dropna().unique())
     years_all = [y for y in years_all if y >= 2016]
+
     if len(years_all) == 0:
         st.warning("年度（2016〜）のデータがありません。")
         st.stop()
 
-    if compare_mode == "同一選手の年度比較（1人＋最大5年）":
+    # ★同一選手比較：年度を複数（最大5年）
+    if compare_mode == SAME_MODE:
         selected_years = st.multiselect(
             "年度を選択してください（最大5年）",
             options=years_all,
@@ -241,6 +241,7 @@ if mode == "年度＋月で選ぶ":
         months_str = ", ".join(str(int(m)) for m in selected_months)
         filter_label = f"年度：{years_str} / 月：{months_str}"
 
+    # 複数選手比較：年度は単年（従来）
     else:
         selected_year = st.selectbox(
             "年度を選択してください",
@@ -260,7 +261,7 @@ if mode == "年度＋月で選ぶ":
             st.stop()
 
         selected_months = st.multiselect(
-            "月を選択してください（複数選択可 / 測定日が存在する月のみ）",
+            "月を選択してください（複数可 / 測定日が存在する月のみ）",
             options=months,
             default=[months[-1]]
         )
@@ -324,9 +325,14 @@ st.subheader(f"選手：{', '.join(selected_names_norm)} / {filter_label}")
 
 # -----------------------------
 # 10) 指標ごとにグラフ
+#   - 同一選手比較 × 年度+月：年度-月で色分け、overlay_dateで重ね描き
 # -----------------------------
 for metric_ja in selected_metrics_ja:
     col = metric_dict[metric_ja]
+    if col not in df_period.columns:
+        st.warning(f"'{metric_ja}' の列 '{col}' がデータにないため表示できません。")
+        continue
+
     df_period[col] = pd.to_numeric(df_period[col], errors="coerce")
 
     use_cols = ["measurement_date", "name", YEAR_COL, col]
@@ -362,7 +368,7 @@ for metric_ja in selected_metrics_ja:
 
     st.markdown(f"### {metric_ja}")
 
-    if compare_mode == "同一選手の年度比較（1人＋最大5年）" and mode == "年度＋月で選ぶ":
+    if compare_mode == SAME_MODE and mode == "年度＋月で選ぶ":
         plot_df[YEAR_COL] = pd.to_numeric(plot_df[YEAR_COL], errors="coerce").astype("Int64")
         plot_df["month"] = pd.to_datetime(plot_df["measurement_date"], errors="coerce").dt.month.astype("Int64")
         plot_df["year_month_label"] = plot_df[YEAR_COL].astype(str) + "-" + plot_df["month"].astype(str)
@@ -456,7 +462,7 @@ if len(text_cols_exist) == 0:
     st.info("テキスト項目の列が見つかりません。")
 else:
     text_base_cols = ["measurement_date", "name"]
-    if compare_mode == "同一選手の年度比較（1人＋最大5年）" and mode == "年度＋月で選ぶ":
+    if compare_mode == SAME_MODE and mode == "年度＋月で選ぶ":
         df_period["_fy"] = pd.to_numeric(df_period[YEAR_COL], errors="coerce").astype("Int64")
         df_period["_m"] = pd.to_datetime(df_period["measurement_date"], errors="coerce").dt.month.astype("Int64")
         df_period["_year_month_label"] = df_period["_fy"].astype(str) + "-" + df_period["_m"].astype(str)
@@ -492,3 +498,6 @@ else:
         st.info("指定条件の範囲で、テキスト入力があるデータはありません。")
     else:
         st.dataframe(text_df, use_container_width=True)
+
+
+
