@@ -63,7 +63,7 @@ metric_dict = {
     "睡眠状況": "sleep_status",
     "食欲（mm）": "appetite_mm",
     "故障の程度（mm）": "injury_severity_mm",
-    "練習強度（mm）": "training_intensity",
+    "練習強度（mm）": "training_intensity_mm",
     "便の形": "stool_form",
     "走行距離（km）": "distance_km",
     "SpO2（%）": "spo2",
