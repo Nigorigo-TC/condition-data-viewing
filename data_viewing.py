@@ -109,8 +109,12 @@ x_axis_format = "%Y-%m-%d"
 # -----------------------------
 # ★テキスト（文字列）列：自動で表に出す
 # -----------------------------
+# 「故障の箇所」の Supabase カラム名をここで指定（要修正）
+INJURY_LOC_COL = "injury_location"  # 例: "injury_site" / "injury_part" など
+
 TEXT_COLS = [
     ("睡眠状況", "sleep_status"),
+    ("故障の箇所", INJURY_LOC_COL),
     ("特記事項", "notes"),
     ("その他", "another"),
     ("備考", "remarks"),
@@ -234,7 +238,7 @@ if df_period is None or df_period.empty:
 # -----------------------------
 # 7) 指標選択（最大5項目） ※文字列系は選ばせない
 # -----------------------------
-non_numeric_cols = {"sleep_status", "notes", "another", "remarks", "stool_form"}
+non_numeric_cols = {"sleep_status", "notes", "another", "remarks", "stool_form", INJURY_LOC_COL}
 
 metric_options = [k for k, v in metric_dict.items() if v not in non_numeric_cols]
 
@@ -258,47 +262,7 @@ if len(selected_metrics_ja) > 5:
 st.subheader(f"選手：{', '.join(selected_names)} / {filter_label}")
 
 # -----------------------------
-# ★9) テキスト項目は自動で表に出す（グラフとは別）
-# -----------------------------
-st.markdown("## テキスト項目（自動表示）")
-
-# 表に出す列（存在するものだけ）
-text_cols_exist = [(ja, col) for (ja, col) in TEXT_COLS if col in df_period.columns]
-
-if len(text_cols_exist) == 0:
-    st.info("テキスト項目の列が見つかりません。")
-else:
-    show_cols = ["measurement_date", "name"] + [col for (_, col) in text_cols_exist]
-    text_df = df_period.loc[:, show_cols].copy()
-
-    # 表示用に日付を文字列へ
-    text_df["measurement_date"] = text_df["measurement_date"].dt.strftime(x_axis_format)
-
-    # 文字列の前後空白を除去（任意）
-    for _, col in text_cols_exist:
-        text_df[col] = text_df[col].astype(str).str.strip()
-        # "nan" のような表示を空にする（任意）
-        text_df.loc[text_df[col].isin(["nan", "None", "NaT"]), col] = ""
-
-    # テキストが全部空の行は落とす（必要なら）
-    text_only_cols = [col for (_, col) in text_cols_exist]
-    text_df = text_df.dropna(subset=text_only_cols, how="all")
-    text_df = text_df[~(text_df[text_only_cols].apply(lambda r: all(str(x).strip() == "" for x in r), axis=1))]
-
-    # 列名を日本語に
-    rename_map = {col: ja for (ja, col) in text_cols_exist}
-    text_df = text_df.rename(columns=rename_map)
-
-    # 並び
-    text_df = text_df.sort_values(["name", "measurement_date"])
-
-    if text_df.empty:
-        st.info("指定条件の範囲で、テキスト入力があるデータはありません。")
-    else:
-        st.dataframe(text_df, use_container_width=True)
-
-# -----------------------------
-# 10) 指標ごとにグラフを表示（最大5枚）
+# 9) 指標ごとにグラフを表示（最大5枚）
 # -----------------------------
 for metric_ja in selected_metrics_ja:
     col = metric_dict[metric_ja]
@@ -370,18 +334,40 @@ for metric_ja in selected_metrics_ja:
 
     st.dataframe(summary, use_container_width=True)
 
+# -----------------------------
+# ★10) テキスト項目はグラフの下に表で出す
+# -----------------------------
+st.markdown("## テキスト項目（自動表示）")
 
+text_cols_exist = [(ja, col) for (ja, col) in TEXT_COLS if col in df_period.columns]
 
+if len(text_cols_exist) == 0:
+    st.info("テキスト項目の列が見つかりません。")
+else:
+    show_cols = ["measurement_date", "name"] + [col for (_, col) in text_cols_exist]
+    text_df = df_period.loc[:, show_cols].copy()
 
+    # 表示用に日付を文字列へ
+    text_df["measurement_date"] = text_df["measurement_date"].dt.strftime(x_axis_format)
 
+    # 文字列の前後空白を除去
+    for _, col in text_cols_exist:
+        text_df[col] = text_df[col].astype(str).str.strip()
+        text_df.loc[text_df[col].isin(["nan", "None", "NaT"]), col] = ""
 
+    # テキストが全部空の行は落とす（必要なら）
+    text_only_cols = [col for (_, col) in text_cols_exist]
+    text_df = text_df.dropna(subset=text_only_cols, how="all")
+    text_df = text_df[~(text_df[text_only_cols].apply(lambda r: all(str(x).strip() == "" for x in r), axis=1))]
 
+    # 列名を日本語に
+    rename_map = {col: ja for (ja, col) in text_cols_exist}
+    text_df = text_df.rename(columns=rename_map)
 
+    # 並び
+    text_df = text_df.sort_values(["name", "measurement_date"])
 
-
-
-
-
-
-
-
+    if text_df.empty:
+        st.info("指定条件の範囲で、テキスト入力があるデータはありません。")
+    else:
+        st.dataframe(text_df, use_container_width=True)
