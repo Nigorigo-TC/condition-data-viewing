@@ -45,6 +45,7 @@ metric_dict = {
     "疲労感（mm）": "fatigue_mm",
     "睡眠時間（h）": "sleep_hours",
     "睡眠の深さ（mm）": "sleep_depth_mm",
+    "睡眠状況": "sleep_status",
     "食欲（mm）": "appetite_mm",
     "故障の程度（mm）": "injury_severity_mm",
     "練習強度（mm）": "training_intensity",
@@ -321,6 +322,7 @@ for metric_ja in selected_metrics_ja:
         summary[c] = summary[c].round(2)
 
     st.dataframe(summary, use_container_width=True)
+
 
 
 
