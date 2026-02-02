@@ -139,7 +139,7 @@ MULTI_MODE = "複数選手比較（最大5人）"
 SAME_MODE  = "同一選手比較"
 
 compare_mode = st.radio(
-    "比較モード",
+    "比較方法を選択してください",
     options=[MULTI_MODE, SAME_MODE],
     horizontal=True
 )
